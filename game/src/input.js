@@ -1,5 +1,5 @@
-// Keyboard and pointer input for Kota Karang. Held keys steer, run and brake;
-// one-shot presses (enter a car, fire, pause) are queued and taken once per frame.
+// [REVISI thinking_revised] Keyboard and pointer input for Kota Karang. Held keys steer, run and
+// brake; one-shot presses (enter a car, fire, pause) are queued and taken once per frame.
 
 export const ACTION_CAR = 1;      // E: enter / leave a car
 export const ACTION_FIRE = 2;     // Space on foot: fire
@@ -62,5 +62,7 @@ export function createInput(target) {
       actions = 0;
       return taken;
     },
+    /** True while the pointer is locked, so a shot can report it. */
+    isLocked() { return locked; },
   };
 }

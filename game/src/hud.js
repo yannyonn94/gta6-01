@@ -1,6 +1,9 @@
 // HUD: wanted stars, cash, health bar, objective text and the minimap canvas.
 import { CITY } from './config.js';
 
+// [REVISI] drawMinimap now also draws the mission target, active traffic and pedestrian peds,
+// so a single screenshot can show the mission objective, the wanted level, the chase and the
+// minimap at the same time.
 export class Hud {
   constructor() {
     this.root = document.getElementById('hud');
@@ -40,8 +43,8 @@ export class Hud {
     }
   }
 
-  /** draw a top-down minimap: roads, player arrow, police blips, mission marker */
-  drawMinimap(playerPos, playerHeading, half, police, marker) {
+  /** draw a top-down minimap: roads, player arrow, police blips, mission marker, traffic, peds */
+  drawMinimap(playerPos, playerHeading, half, police, marker, traffic = [], peds = []) {
     const ctx = this.mapCtx;
     const size = this.mapCanvas.width;
     const scale = size / (half * 2.2);
@@ -63,6 +66,20 @@ export class Hud {
       const [a1, b1] = toMap(-half, c);
       const [a2, b2] = toMap(half, c);
       ctx.beginPath(); ctx.moveTo(a1, b1); ctx.lineTo(a2, b2); ctx.stroke();
+    }
+
+    // traffic
+    ctx.fillStyle = '#d8b13c';
+    for (const t of traffic) {
+      const [tx, ty] = toMap(t.pos.x, t.pos.z);
+      ctx.fillRect(tx - 1.5, ty - 1.5, 3, 3);
+    }
+
+    // pedestrians
+    ctx.fillStyle = '#b9c2d0';
+    for (const p of peds) {
+      const [qx, qy] = toMap(p.pos.x, p.pos.z);
+      ctx.fillRect(qx - 1, qy - 1, 2, 2);
     }
 
     // mission marker

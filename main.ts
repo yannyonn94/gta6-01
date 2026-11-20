@@ -1,4 +1,4 @@
-// Kota Karang: the make.fun gta6-01 entry, an original open-world crime game.
+// [REVISI thinking_revised] Kota Karang: the make.fun gta6-01 entry, an original open-world crime game.
 //
 // The game is this directory's game/ folder: plain static files a desktop browser loads offline
 // (game/index.html and its ES modules). Three.js is vendored under game/vendor/, everything else

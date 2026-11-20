@@ -1,5 +1,5 @@
-// Pedestrians: simple walkers that stroll the sidewalks and scatter when a
-// wanted level is active.
+// [REVISI thinking_revised] Pedestrians: simple walkers that stroll the sidewalks and scatter
+// when a wanted level is active.
 import { rand } from './world_config.js';
 
 const T = window.THREE;

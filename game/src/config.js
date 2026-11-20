@@ -1,4 +1,4 @@
-// Every tuning number and colour in one place for Kota Karang, the open world.
+// [REVISI thinking_revised] Every tuning number and colour in one place for Kota Karang, the open world.
 // Distances are metres, speeds metres per second, times seconds.
 
 export const CITY = {
@@ -48,6 +48,8 @@ export const PALETTE = {
   ground: 0x243026,
   policeBody: 0xf2f4f6,
   policeStripe: 0x14213d,
+  trafficBlip: 0xd8b13c,
+  pedBlip: 0xb9c2d0,
 };
 
 /** Where progress is kept between visits (this browser only). */

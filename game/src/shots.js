@@ -28,6 +28,7 @@ export function stageShot(name, ctx) {
       camera.position.set(7.6, 2.8, 34.2);
       camera.lookAt(6.4, 1.6, 46);
       if (hud) hud.show(true);
+      if (hud) hud.setObjective('Misi: Kereta Mati — Ambil mobil biru di garasi dan bawa ke dermaga. (42 m)');
       return 'play';
     }
     case 'chase': {
@@ -46,6 +47,8 @@ export function stageShot(name, ctx) {
       camera.position.set(cx + 1.8, 3.0, cz + 7.5);
       camera.lookAt(cx, 1.4, cz - 12);
       if (hud) hud.show(true);
+      if (hud) hud.setWanted(3);
+      if (hud) hud.setObjective('Misi: Hilang Sejenak — Polisi sudah tahu. Turunkan bintang wanted kamu.');
       return 'chase';
     }
     case 'drive': {
@@ -60,6 +63,7 @@ export function stageShot(name, ctx) {
       camera.position.set(6, 4.0, -68);
       camera.lookAt(6, 0.9, -50);
       if (hud) hud.show(true);
+      if (hud) hud.setObjective('Misi: Kereta Mati — Ambil mobil biru di garasi dan bawa ke dermaga. (152 m)');
       return 'drive';
     }
     case 'end':

@@ -1,4 +1,4 @@
-// Vehicles: parked cars to steal, plus a traffic fleet that drives the roads.
+// [REVISI thinking_revised] Vehicles: parked cars to steal, plus a traffic fleet that drives the roads.
 import { CAR_SPEED, clamp, rand } from './world_config.js';
 
 const T = window.THREE;

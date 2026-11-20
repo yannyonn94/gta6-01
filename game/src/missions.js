@@ -1,4 +1,4 @@
-// Missions: three authored jobs with clear objectives, markers and rewards.
+// [REVISI thinking_revised] Missions: three authored jobs with clear objectives, markers and rewards.
 // Objective kinds: go (reach a point), steal (bring a car to the drop),
 // collect (pick up bags), evade (lose the wanted level).
 import { MISSION } from './config.js';

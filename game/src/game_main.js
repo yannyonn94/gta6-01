@@ -161,6 +161,8 @@ function addWanted(amount) {
 }
 
 // ---------- wanted / police ----------
+// [REVISI thinking_revised] Wanted decay keeps the wantedTimer fresh, so evading police and
+// stopping crime properly lowers the wanted level instead of it ticking down mid-chase.
 function updateWanted(dt) {
   if (state.wanted > 0) {
     state.wantedTimer -= dt;
@@ -331,6 +333,8 @@ function frame(now) {
       half,
       police.filter((p) => p.group.visible),
       marker,
+      traffic.filter((t) => t.driver === 'traffic'),
+      peds,
     );
 
     state.saveTimer -= dt;

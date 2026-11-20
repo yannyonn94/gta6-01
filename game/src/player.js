@@ -1,4 +1,4 @@
-// The player: a small body that walks and runs on foot, and can enter a car.
+// [REVISI thinking_revised] The player: a small body that walks and runs on foot, and can enter a car.
 import { PLAYER_HEIGHT, WALK_SPEED, RUN_SPEED, clamp } from './world_config.js';
 
 const T = window.THREE;
@@ -85,5 +85,17 @@ export class Player {
     this.group.visible = true;
     this.pos.set(car.mesh.position.x + 1.6, 0, car.mesh.position.z);
     this.group.position.copy(this.pos);
+  }
+
+  /** World position to aim at: the chest, or the car's cabin when driving. */
+  aimPoint() {
+    if (this.inCar) {
+      const p = this.inCar.mesh.position.clone();
+      p.y = 1.2;
+      return p;
+    }
+    const p = this.pos.clone();
+    p.y = 1.3;
+    return p;
   }
 }

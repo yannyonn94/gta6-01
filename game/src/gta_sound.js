@@ -1,4 +1,4 @@
-// Procedural audio: every sound is synthesized with WebAudio, no files.
+// [REVISI thinking_revised] Procedural audio: every sound is synthesized with WebAudio, no files.
 export class GtaSound {
   constructor() {
     this.ctx = null;

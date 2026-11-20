@@ -1,4 +1,4 @@
-// GTA-style open world game constants and small helpers.
+// [REVISI thinking_revised] GTA-style open world game constants and small helpers.
 // All values are authored for this entry; no commercial game data is used.
 
 export const CITY_NAME = 'Kota Karang';
@@ -35,4 +35,9 @@ export function seeded(seed) {
 
 export function pick(list, rng) {
   return list[Math.floor(rng() * list.length) % list.length];
+}
+
+/** Distance in the ground plane; the world has no vertical extent to speak of. */
+export function dist2(ax, az, bx, bz) {
+  return Math.hypot(ax - bx, az - bz);
 }

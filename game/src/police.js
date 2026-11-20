@@ -1,4 +1,4 @@
-// Police: patrol cars that chase the player when the wanted level rises.
+// [REVISI thinking_revised] Police: patrol cars that chase the player when the wanted level rises.
 import { CAR_SPEED, clamp } from './world_config.js';
 
 const T = window.THREE;

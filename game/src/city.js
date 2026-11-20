@@ -1,4 +1,4 @@
-// Builds the city of Kota Karang: ground, roads, blocks with buildings,
+// [REVISI thinking_revised] Builds the city of Kota Karang: ground, roads, blocks with buildings,
 // streetlights and palm trees. Everything is generated from a seed.
 import { GRID, BLOCK, ROAD_W, SIDEWALK, seeded, rand } from './world_config.js';
 
