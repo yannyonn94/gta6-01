@@ -431,6 +431,7 @@ function berhenti() {
 // ---------- loop ----------
 let terakhir = performance.now();
 function loop(now) {
+  window.__frame = (window.__frame || 0) + 1;
   const dt = Math.min((now - terakhir) / 1000, MAX_FRAME);
   terakhir = now;
   const { yaw, pitch } = masukan.pandang();
