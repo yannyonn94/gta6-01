@@ -431,7 +431,6 @@ function berhenti() {
 // ---------- loop ----------
 let terakhir = performance.now();
 function loop(now) {
-  window.__frame = (window.__frame || 0) + 1;
   const dt = Math.min((now - terakhir) / 1000, MAX_FRAME);
   terakhir = now;
   const { yaw, pitch } = masukan.pandang();
@@ -521,6 +520,7 @@ function loop(now) {
   camera.lookAt(target.x, target.y + 0.5, target.z);
 
   renderer.render(scene, camera);
+  requestAnimationFrame(loop);
 }
 
 // ---------- mode shot ----------
@@ -541,7 +541,6 @@ if (mode !== 'none') {
   requestAnimationFrame(loop);
 }
 
-window.__kotaDebug = () => ({ started: state.started, paused: state.paused, misi: misi.indeks, aktif: misi.aktif?.id ?? null, wanted: state.wanted });
 btnMulai.addEventListener('click', () => {
   localStorage.removeItem(KUNCI_SIMPAN);
   state.wanted = 0;
