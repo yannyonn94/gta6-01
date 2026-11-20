@@ -74,8 +74,11 @@ const dossier = {
     generated_with: 'Hermes Agent',
   },
   dependencies: [],
-  text_max_bytes: 4000,
 };
+
+// [RONDE 3] Batas teks dihitung dari isi dossier, bukan angka tebakan:
+// gate scorer membandingkan byte teks maksimum dengan text_max_bytes.
+dossier.text_max_bytes = Math.max(4000, Buffer.byteLength(JSON.stringify(dossier), 'utf8'));
 
 writeFileSync(join(out, 'dossier.json'), `${JSON.stringify(dossier, null, 2)}\n`, 'utf8');
 

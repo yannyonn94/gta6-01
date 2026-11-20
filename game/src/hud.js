@@ -77,7 +77,7 @@ export class Hud {
     }
   }
 
-  gambarMinimap(pos, heading, setengah, polisi, penanda, lalu = [], pejalan = []) {
+  gambarMinimap(pos, heading, setengah, polisi, penanda, lalu = [], pejalan = [], pom = []) {
     const ctx = this.ctx;
     const ukuran = this.kanvas.width;
     const skala = ukuran / (setengah * 2.2);
@@ -108,6 +108,12 @@ export class Hud {
     for (const p of pejalan) {
       const [x, y] = ke(p.pos.x, p.pos.z);
       ctx.fillRect(x - 1, y - 1, 2, 2);
+    }
+
+    ctx.fillStyle = '#2f9e6e';
+    for (const p of pom) {
+      const [x, y] = ke(p.x, p.z);
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
     }
 
     if (penanda) {

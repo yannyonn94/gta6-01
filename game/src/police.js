@@ -44,7 +44,7 @@ export class MobilPolisi {
     this.sisi = indeks % 2 ? 1 : -1;
   }
 
-  kejar(dt, sasaran, aktif, kecepatanSasaran = null) {
+  kejar(dt, sasaran, aktif, kecepatanSasaran = null, rekan = []) {
     if (!aktif) {
       this.laju *= 0.9;
       this.kelompok.position.copy(this.pos);
@@ -67,6 +67,19 @@ export class MobilPolisi {
     if (jarak < 14) {
       this.pos.x += Math.sin(this.heading + Math.PI / 2) * this.sisi * dt * 2.4;
       this.pos.z += Math.cos(this.heading + Math.PI / 2) * this.sisi * dt * 2.4;
+    }
+
+    // [RONDE 3] Cruiser lain dipakai sebagai penghalang lembut supaya armada
+    // tidak menumpuk di titik yang sama.
+    for (const r of rekan) {
+      if (r === this) continue;
+      const rx = this.pos.x - r.pos.x, rz = this.pos.z - r.pos.z;
+      const d = Math.hypot(rx, rz);
+      if (d > 0.001 && d < 3.4) {
+        const dorong = (3.4 - d) / 3.4;
+        this.pos.x += (rx / d) * dorong * dt * 6;
+        this.pos.z += (rz / d) * dorong * dt * 6;
+      }
     }
 
     this.kelompok.position.copy(this.pos);

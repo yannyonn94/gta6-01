@@ -468,7 +468,7 @@ function loop(now) {
       const kecepatanSasaran = pemain.diMobil
         ? { x: Math.sin(pemain.heading) * pemain.diMobil.laju, z: Math.cos(pemain.heading) * pemain.diMobil.laju }
         : { x: Math.sin(pemain.heading) * pemain.laju, z: Math.cos(pemain.heading) * pemain.laju };
-      p.kejar(dt, target, aktif && i < state.wanted, kecepatanSasaran);
+      p.kejar(dt, target, aktif && i < state.wanted, kecepatanSasaran, polisi);
     });
 
     for (const ped of pejalan) ped.lentur(dt, pemain.pos, state.wanted > 0, pemain.diMobil ? [pemain.diMobil] : []);
@@ -498,7 +498,7 @@ function loop(now) {
       }
       penanda.position.set(penandaPos ? penandaPos.x : 0, 0.3, penandaPos ? penandaPos.z : 0);
       penanda.visible = !!penandaPos;
-      hud.gambarMinimap(pemain.pos, pemain.heading, setengahKota, polisi, penandaPos, lalu, pejalan);
+      hud.gambarMinimap(pemain.pos, pemain.heading, setengahKota, polisi, penandaPos, lalu, pejalan, pom);
     }
 
     hud.aturObjektif(misi.teksObjektif(pemain.pos, Math.round(state.wanted)));

@@ -7,10 +7,10 @@ sebelumnya.
 ## Main
 
 ```bash
-npm install
-npx tsc --noEmit
 mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
+
+Node menjalankan TypeScript langsung (type stripping), jadi tidak perlu langkah `tsc` terpisah.
 
 `main.ts` menvalidasi screenshot lalu menuliskan `out/dossier.json` dan
 menyalin `screenshots/1-start.jpg` … `4-drive.jpg` ke `out/`.
