@@ -9,7 +9,7 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
@@ -21,6 +21,30 @@ mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+
+// [RONDE 2] Validasi screenshot sebelum dossier dibangun: 3-4 berkas, PNG/JPEG,
+// maksimal 256 KiB per berkas. Lebih baik gagal di sini dengan pesan jelas
+// daripada ditolak scorer di sisi server setelah entry dikirim.
+const shotsDir = join(here, 'screenshots');
+let shotNames = [];
+try {
+  shotNames = readdirSync(shotsDir);
+} catch {
+  shotNames = [];
+}
+const badName = shotNames.filter((n) => !/\.(png|jpe?g)$/i.test(n));
+const tooBig = shotNames.filter((n) => {
+  try {
+    return statSync(join(shotsDir, n)).size > 262144;
+  } catch {
+    return false;
+  }
+});
+if (shotNames.length < 3 || shotNames.length > 4 || badName.length > 0 || tooBig.length > 0) {
+  throw new Error(
+    `screenshots tidak sah: ${shotNames.length} berkas, nama buruk=${badName.join(',') || '-'}, terlalu besar=${tooBig.join(',') || '-'}`,
+  );
+}
 
 // The scorer's own caps: only text_max_bytes shapes the bytes; the others refuse an entry the
 // scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/

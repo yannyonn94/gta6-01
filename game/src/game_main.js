@@ -143,6 +143,7 @@ function begin(fresh) {
   hud.setCash(state.cash);
   hud.setWanted(state.wanted);
   hud.setScore(score);
+  hud.setHealth(player.health);
   sound.resume();
   sound.music(true);
   if (!missions.active) startMission(MISSIONS[missions.index]);
@@ -360,6 +361,34 @@ function updateCamera(dt, yaw) {
 const shotCtx = { player, camera, traffic, police, pedestrians: peds, cityHalf: half, hud, overlay, daynight };
 const staged = state.started ? '' : stageShot(shot.shot, shotCtx);
 
+// [RONDE 2] Interaksi dengan lalu lintas: menabrak mengurangi nyawa dan
+// memperlambat mobil, lewat dekat tanpa tabrakan memberi skor "nyaris".
+let crashCooldown = 0;
+let nearMissCooldown = 0;
+function updateTrafficInteraction(dt) {
+  if (!player.inCar) return;
+  const car = player.inCar;
+  const speed = Math.abs(car.speed);
+  crashCooldown -= dt;
+  nearMissCooldown -= dt;
+  for (const t of traffic) {
+    if (t.driver !== 'traffic') continue;
+    const d = Math.hypot(t.pos.x - car.pos.x, t.pos.z - car.pos.z);
+    if (d < 2.6 && speed > 4 && crashCooldown <= 0) {
+      crashCooldown = 0.8;
+      player.health = Math.max(0, player.health - 8);
+      hud.setHealth(player.health);
+      hud.flash('Tabrakan! Nyawa -8', 1.4);
+      car.speed *= 0.4;
+      sound.blip(180, 0.18, 'sawtooth', 0.3);
+      addWanted(0.2);
+    } else if (d < 5.5 && speed > 10 && nearMissCooldown <= 0) {
+      nearMissCooldown = 1.2;
+      score.add(SCORE.nearMiss, 'Nyaris tabrak');
+    }
+  }
+}
+
 // ---------- loop ----------
 let last = performance.now();
 function frame(now) {
@@ -391,6 +420,7 @@ function frame(now) {
     updateWanted(dt);
     updateMission(dt);
     updateBullets(dt);
+    updateTrafficInteraction(dt);
     score.update(dt);
     hud.update(dt);
     hud.setScore(score);

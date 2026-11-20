@@ -36,7 +36,8 @@ export class Hud {
 
   setScore(score) {
     this.scoreEl.textContent = score.text;
-    const c = score.comboText;
+    // Label bergerak: kombo bila aktif, kalau tidak tunjukkan aksi terakhir.
+    const c = score.comboText || score.statusText();
     this.comboEl.textContent = c;
     this.comboEl.style.opacity = c ? '1' : '0';
   }
