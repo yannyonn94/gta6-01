@@ -1,7 +1,8 @@
 // [RONDE 2] Polisi: cruiser yang mengejar dengan prediksi posisi pemain, jadi
 // kejar-kejaran terasa seperti dikepung, bukan cuma diikuti. Lampu bar
 // berkedip dan kecepatan tiap mobil berbeda-beda.
-import { CAR_SPEED, POLICE, clamp } from './world_config.js';
+import { POLICE } from './config.js';
+import { CAR_SPEED, clamp } from './world_config.js';
 
 const T = window.THREE;
 

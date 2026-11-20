@@ -1,6 +1,7 @@
 // [RONDE 2] Pejalan kaki: berjalan di trotoar, menyeberang jalan di persimpangan,
 // menghindar mobil yang melintas, dan panik bila ada wanted.
-import { PEDS, clamp, rand } from './world_config.js';
+import { PEDS } from './config.js';
+import { clamp, rand } from './world_config.js';
 
 const T = window.THREE;
 const SKIN = [0xc98f6b, 0x8d5a3b, 0xe0b48f];
