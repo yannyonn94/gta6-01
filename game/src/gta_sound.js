@@ -1,5 +1,7 @@
-// [RONDE 4] Audio prosedural WebAudio: tembakan, sirene, mesin, blip, musik,
-// klakson, koin, dan jingle misi.
+// [RONDE 5] Audio prosedural WebAudio: tembakan, sirene, mesin, blip, musik,
+// klakson, koin, jingle misi, derau hujan, dan sengatan wanted naik.
+import { SUARA } from './config.js';
+
 export class SuaraGTA {
   constructor() {
     this.ctx = null;
@@ -7,6 +9,7 @@ export class SuaraGTA {
     this.musikGain = null;
     this.osMesin = null;
     this.osSirene = null;
+    this.nodeHujan = null;
     this.nyalakan = true;
   }
 
@@ -16,12 +19,23 @@ export class SuaraGTA {
     if (!AC) return false;
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.5;
+    this.master.gain.value = SUARA.master;
     this.master.connect(this.ctx.destination);
     this.musikGain = this.ctx.createGain();
-    this.musikGain.gain.value = 0.25;
+    this.musikGain.gain.value = SUARA.musik;
     this.musikGain.connect(this.master);
     return true;
+  }
+
+  /** Matikan/nyalakan semua suara (tombol M); kembalikan status nyala. */
+  bisukan() {
+    this.nyalakan = !this.nyalakan;
+    if (!this.nyalakan) {
+      this.sirene(false);
+      this.mesin(0);
+      this.hujan(0);
+    }
+    return this.nyalakan;
   }
 
   lanjut() {
@@ -77,7 +91,7 @@ export class SuaraGTA {
       this.osMesin.connect(lp).connect(this.gainMesin).connect(this.master);
       this.osMesin.start();
     }
-    this.gainMesin.gain.setTargetAtTime(Math.min(0.16, level * 0.16), this.ctx.currentTime, 0.08);
+    this.gainMesin.gain.setTargetAtTime(Math.min(SUARA.mesinMaks, level * SUARA.mesinMaks), this.ctx.currentTime, 0.08);
     this.osMesin.frequency.setTargetAtTime(60 + level * 130, this.ctx.currentTime, 0.08);
   }
 
@@ -124,6 +138,43 @@ export class SuaraGTA {
     [523, 659, 784, 1047].forEach((f, i) => {
       setTimeout(() => this.blip(f, 0.16, 'triangle', 0.25), i * 110);
     });
+  }
+
+  /** Derau hujan berulang: noise putih lewat lowpass, volume ikut intensitas. */
+  hujan(level) {
+    if (!this.pastikan() || !this.nyalakan) level = 0;
+    if (level > 0.02 && !this.nodeHujan) {
+      const dur = 2;
+      const buf = this.ctx.createBuffer(1, Math.floor(this.ctx.sampleRate * dur), this.ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 1200;
+      const g = this.ctx.createGain();
+      g.gain.value = 0;
+      src.connect(f).connect(g).connect(this.master);
+      src.start();
+      this.nodeHujan = { src, gain: g };
+    }
+    if (this.nodeHujan) {
+      if (level <= 0.02) {
+        try { this.nodeHujan.src.stop(); } catch {}
+        this.nodeHujan = null;
+      } else {
+        this.nodeHujan.gain.gain.setTargetAtTime(level * 0.12, this.ctx.currentTime, 0.3);
+      }
+    }
+  }
+
+  /** Sengatan dua nada saat wanted naik: peringatan singkat. */
+  sengatanWanted() {
+    if (!this.pastikan() || !this.nyalakan) return;
+    this.blip(220, 0.12, 'sawtooth', 0.2);
+    setTimeout(() => this.blip(330, 0.16, 'sawtooth', 0.2), 130);
   }
 
   musik(on) {

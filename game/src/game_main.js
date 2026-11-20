@@ -1,18 +1,19 @@
-// [RONDE 4] Inti permainan "Kota Karang": dunia, pemain, polisi, lalu lintas,
-// misi, bahan bakar, koin, bintang dan bulan, dan mode screenshot.
-import { KOTA, MOBIL, MOTOR, POLISI, SKOR, KOINS, WARNA, KUNCI_SIMPAN, MAX_FRAME } from './config.js';
+// [RONDE 5] Inti permainan "Kota Karang": dunia, pemain, polisi, lalu lintas,
+// misi, bahan bakar, koin, bintang dan bulan, hujan badai, roadblock,
+// van logistik, mode foto, dan mode screenshot.
+import { KOTA, MOBIL, MOTOR, POLISI, SKOR, KOINS, WARNA, KUNCI_SIMPAN, MAX_FRAME, HUJAN, MISI } from './config.js';
 import { batas, acak, jarak2 } from './world_config.js';
 import { bangunKota } from './city.js';
 import { Pemain } from './player.js';
-import { Mobil, Motor, buatLaluLintas } from './vehicles.js';
-import { buatPolisi } from './police.js';
+import { Mobil, buatLaluLintas } from './vehicles.js';
+import { buatPolisi, buatRoadblock } from './police.js';
 import { buatPejalan } from './pedestrians.js';
 import { buatPomBensin, stasiunTerdekat } from './fuel.js';
 import { MisiState, DAFTAR_MISI } from './missions.js';
 import { Hud } from './hud.js';
-import { buatMasukan, AKSI_MOBIL, AKSI_TEMBAK, AKSI_JEDA, AKSI_KLAKSON } from './input.js';
+import { buatMasukan, AKSI_MOBIL, AKSI_TEMBAK, AKSI_JEDA, AKSI_KLAKSON, AKSI_FOTO, AKSI_BISU } from './input.js';
 import { SuaraGTA } from './gta_sound.js';
-import { SiklusHari, buatBintang, buatBulan } from './daynight.js';
+import { SiklusHari, buatBintang, buatBulan, buatHujan } from './daynight.js';
 import { PapanSkor } from './score.js';
 import { bacaQueryShot, tataShot } from './shots.js';
 
@@ -53,9 +54,13 @@ const query = bacaQueryShot();
 const dunia = bangunKota(scene, query.seed);
 const setengahKota = dunia.setengah;
 
-// Bintang dan bulan untuk langit malam.
+// Bintang dan bulan untuk langit malam, plus tetes hujan.
 const bintang = buatBintang(scene);
 const bulan = buatBulan(scene);
+const hujan = buatHujan(scene);
+
+// Roadblock polisi: muncul saat wanted 3 ke atas.
+const roadblock = buatRoadblock(scene);
 
 const pemain = new Pemain(scene);
 pemain.pos.set(0, 0, 12);
@@ -90,11 +95,17 @@ const state = {
   senjata: 0,
   misiIndex: 0,
   paused: false,
+  foto: false,
   crashCd: 0,
   nearCd: 0,
   refillMsg: 0,
   bbmRendahCd: 0,
   minimapCd: 0,
+  roadblockCd: 0,
+  // Cuaca: hujan 0..1 (target), timer pergantian, dan paksa hujan saat misi badai.
+  hujanTarget: 0,
+  cuacaTimer: 30,
+  hujanPaksa: false,
 };
 
 const overlay = document.getElementById('overlay');
@@ -140,9 +151,11 @@ function aturKoinTerlihat(terlihat) {
 }
 
 function tambahWanted(n) {
+  const sebelum = state.wanted;
   state.wanted = batas(state.wanted + n, 0, 5);
   hud.aturWanted(state.wanted);
   if (state.wanted > 0) sound.sirene(true);
+  if (Math.floor(state.wanted) > Math.floor(sebelum)) sound.sengatanWanted();
 }
 
 function beriUang(n) {
@@ -213,12 +226,15 @@ function kendalikanMobil(dt, aksi = 0) {
   if (!pemain.diMobil) return;
 
   const kosong = m.tangki.kosong;
-  // Motor memakai top speed dan akselerasi sendiri; mobil memakai MOBIL.
+  // Motor memakai top speed dan akselerasi sendiri; van memakai belok sendiri.
   const topKendaraan = m.top ?? MOBIL.top;
   const akselKendaraan = m.akselerasi ?? MOBIL.akselerasi;
+  const belokKendaraan = m.belok ?? MOBIL.belok;
+  // Hujan membuat jalan licin: akselerasi dan belok berkurang.
+  const cengkeram = 1 - siklus.hujan * HUJAN.cengkeram;
   const puncak = kosong ? topKendaraan * 0.4 : topKendaraan;
   if (y > 0) {
-    m.laju += (akselKendaraan + (lari ? 0.7 : 0)) * puncak * dt;
+    m.laju += (akselKendaraan + (lari ? 0.7 : 0)) * puncak * dt * cengkeram;
   } else if (y < 0 || rem) {
     m.laju -= (MOBIL.rem * 140 + 1.6) * dt * (rem ? 2.4 : 1);
   } else {
@@ -227,7 +243,7 @@ function kendalikanMobil(dt, aksi = 0) {
   m.laju = batas(m.laju, -puncak * 0.5, puncak);
 
   if (Math.abs(m.laju) > 0.3) {
-    m.heading += -x * MOBIL.belok * dt * (m.laju >= 0 ? 1 : -1);
+    m.heading += -x * belokKendaraan * cengkeram * dt * (m.laju >= 0 ? 1 : -1);
   }
 
   const jarakTempuh = m.laju * dt;
@@ -240,6 +256,19 @@ function kendalikanMobil(dt, aksi = 0) {
   m.tangki.pakai(Math.abs(jarakTempuh));
   pemain.pos.set(m.pos.x, 0, m.pos.z);
   pemain.heading = m.heading;
+
+  // Menabrak roadblock: mobil melambat drastis dan nyawa berkurang sedikit.
+  if (roadblock.aktif && Math.abs(m.laju) > 3) {
+    const dRb = jarak2(m.pos.x, m.pos.z, roadblock.pos.x, roadblock.pos.z);
+    if (dRb < 4.5 && state.crashCd <= 0) {
+      state.crashCd = 1.2;
+      m.laju *= 0.25;
+      pemain.terluka(5);
+      hud.aturNyawa(pemain.nyawa);
+      hud.kilat('Roadblock! Kamu menabrak palang polisi. Nyawa -5', 1.8);
+      sound.blip(180, 0.18, 'sawtooth', 0.3);
+    }
+  }
 
   // Isi ulang di pom bensin saat berhenti.
   for (const p of pom) {
@@ -262,7 +291,7 @@ function kendalikanMobil(dt, aksi = 0) {
     if (state.bbmRendahCd <= 0) {
       state.bbmRendahCd = 4;
       const { jarak } = stasiunTerdekat(m.pos.x, m.pos.z, pom);
-      hud.kilat(`Bahan bakar rendah — pom bensin terdekat ${Math.round(jarak)} m.`, 2.5);
+      hud.kilat(`Bahan bakar rendah — pom bensin terdekat ${Math.round(jarak)} m, sisa jarak ~${m.tangki.sisaJarak()} m.`, 2.5);
     }
   }
 }
@@ -279,7 +308,7 @@ function interaksiLalu(dt) {
     const d = jarak2(t.pos.x, t.pos.z, m.pos.x, m.pos.z);
     if (d < 2.7 && laju > 4 && state.crashCd <= 0) {
       state.crashCd = 0.8;
-      pemain.nyawa = Math.max(0, pemain.nyawa - 8);
+      pemain.terluka(8);
       hud.aturNyawa(pemain.nyawa);
       hud.kilat('Tabrakan! Nyawa -8', 1.4);
       m.laju *= 0.4;
@@ -356,6 +385,8 @@ function langkahPeluru(dt) {
 }
 
 // ---------- misi ----------
+const MISI_TARGET_JARAK = 4;
+
 function jalankanMisi(dt) {
   if (!state.started || !misi.aktif) return;
   const pos = pemain.pos;
@@ -405,6 +436,14 @@ function jalankanMisi(dt) {
     }
     if (misi.terkumpul >= misi.aktif.jumlah) selesaiMisi();
     else if (misi.sisa <= 0) gagalMisi('Waktu habis.');
+  } else if (misi.aktif.jenis === 'antar') {
+    misi.sisa -= dt;
+    const diVan = pemain.diMobil?.van === true;
+    const t = misi.aktif.target;
+    if (diVan && jarak2(pos.x, pos.z, t.x, t.z) < MISI.jarakAntar) {
+      skor.tambah(SKOR.antar, 'Antar van');
+      selesaiMisi();
+    } else if (misi.sisa <= 0) gagalMisi('Waktu habis.');
   } else if (misi.aktif.jenis === 'curi') {
     if (pemain.diMobil === mobilCuri && jarak2(pos.x, pos.z, misi.aktif.target.x, misi.aktif.target.z) < 10) {
       selesaiMisi();
@@ -412,16 +451,18 @@ function jalankanMisi(dt) {
   }
 }
 
-const MISI_TARGET_JARAK = 4;
-
 function selesaiMisi() {
   const m = misi.aktif;
   beriUang(m.hadiah);
   skor.tambah(SKOR.misi, m.judul);
-  hud.kilat(`Misi selesai: ${m.judul} (+$${m.hadiah})`, 3.4);
+  // Misi selesai memulihkan sedikit nyawa: hadiah untuk bertahan hidup.
+  const nyawaBaru = pemain.pulihNyawa(MISI.pulihNyawa);
+  hud.aturNyawa(nyawaBaru);
+  hud.kilat(`Misi selesai: ${m.judul} (+$${m.hadiah}, nyawa +${MISI.pulihNyawa})`, 3.4);
   sound.jingle();
   misi.aktif = null;
   aturKoinTerlihat(false);
+  state.hujanPaksa = false;
   misi.indeks += 1;
   simpan();
   if (misi.indeks >= DAFTAR_MISI.length) {
@@ -431,6 +472,12 @@ function selesaiMisi() {
     const berikut = DAFTAR_MISI[misi.indeks];
     hud.kilat(`Misi baru: ${berikut.judul} — ${berikut.briefing}`, 3.2);
     aturKoinTerlihat(true);
+    // Misi badai memaksa hujan deras sampai misinya selesai atau gagal.
+    if (berikut.jenis === 'antar') {
+      state.hujanPaksa = true;
+      state.hujanTarget = 1;
+      hud.kilat('Badai datang! Jalan licin — hati-hati mengemudi.', 3);
+    }
   }
 }
 
@@ -438,6 +485,7 @@ function gagalMisi(alasan) {
   hud.kilat(`Misi gagal: ${alasan}`, 3);
   misi.aktif = null;
   aturKoinTerlihat(false);
+  state.hujanPaksa = false;
   misi.mulai(DAFTAR_MISI[misi.indeks]);
   aturKoinTerlihat(true);
 }
@@ -479,17 +527,44 @@ function begin(lanjutkan) {
   }
 }
 
+const judulOverlay = document.getElementById('judulOverlay');
+const infoJeda = document.getElementById('infoJeda');
+
 function berhenti() {
   state.paused = !state.paused;
   if (state.paused) {
     sound.mesin(0);
     sound.sirene(false);
+    // Menu jeda menampilkan progres supaya pemain tahu posisinya.
+    if (judulOverlay) judulOverlay.textContent = 'Jeda';
+    if (infoJeda) {
+      infoJeda.textContent = `Misi ${Math.min(misi.indeks + 1, DAFTAR_MISI.length)}/${DAFTAR_MISI.length} · Skor ${skor.teks} · Uang $${Math.round(state.uang)} · Wanted ${Math.round(state.wanted)}★ · Nyawa ${Math.round(pemain.nyawa)}`;
+    }
     overlay.classList.remove('hidden');
     document.exitPointerLock?.();
   } else {
+    if (judulOverlay) judulOverlay.textContent = 'KOTA KARANG';
+    if (infoJeda) infoJeda.textContent = '';
     overlay.classList.add('hidden');
     sound.lanjut();
     if (state.wanted > 0) sound.sirene(true);
+  }
+}
+
+/** Mode foto: bekukan permainan, sembunyikan HUD, kamera bebas diseret mouse. */
+const elModeFoto = document.getElementById('modefoto');
+function aturModeFoto(on) {
+  if (state.foto === on) return;
+  state.foto = on;
+  masukan.aturDrag(on);
+  hud.tampil(!on);
+  if (elModeFoto) elModeFoto.classList.toggle('on', on);
+  if (on) {
+    sound.mesin(0);
+    document.exitPointerLock?.();
+    hud.sembunyikanPesan();
+  } else {
+    sound.lanjut();
   }
 }
 
@@ -504,7 +579,27 @@ function loop(now) {
     const aksi = masukan.ambilAksi();
     if (aksi & AKSI_TEMBAK) tembak();
     if (aksi & AKSI_JEDA) berhenti();
+    if (aksi & AKSI_FOTO) aturModeFoto(!state.foto);
+    if (aksi & AKSI_BISU) {
+      const nyala = sound.bisukan();
+      hud.kilat(nyala ? 'Suara dinyalakan.' : 'Suara dimatikan.', 1.6);
+    }
 
+    // Cuaca: pergantian acak, kecuali hujan dipaksa misi badai.
+    if (!state.hujanPaksa) {
+      state.cuacaTimer -= dt;
+      if (state.cuacaTimer <= 0) {
+        state.cuacaTimer = acak(HUJAN.durasiMin, HUJAN.durasiMax);
+        state.hujanTarget = Math.random() < HUJAN.peluang ? 1 : 0;
+      }
+    }
+    siklus.aturHujan(siklus.hujan + (state.hujanTarget - siklus.hujan) * Math.min(1, dt * 0.5));
+    hujan.langkah(dt, pemain.pos.x, pemain.pos.z, siklus.hujan);
+    sound.hujan(siklus.hujan);
+    hud.aturCuaca(siklus.hujan, `${siklus.teksCuaca()} · ${siklus.teksPeriode()}`);
+    for (const p of polisi) p.aturLampu(siklus.gelap);
+
+    if (!state.foto) {
     pemain.lentur(dt, masukan.gerak(), yaw, setengahKota);
     kendalikanMobil(dt, aksi);
     for (const m of lalu) {
@@ -536,7 +631,7 @@ function loop(now) {
       p.kejar(dt, target, aktif && i < state.wanted, kecepatanSasaran, polisi, Math.round(state.wanted));
     });
 
-    for (const ped of pejalan) ped.lentur(dt, pemain.pos, state.wanted > 0, pemain.diMobil ? [pemain.diMobil] : []);
+    for (const ped of pejalan) ped.lentur(dt, pemain.pos, state.wanted > 0, pemain.diMobil ? [pemain.diMobil] : [], siklus.hujan);
     jalankanMisi(dt);
     skor.langkah(dt);
     hud.langkah(dt);
@@ -548,9 +643,29 @@ function loop(now) {
     }
 
     if (aktif) {
-      state.wanted = batas(state.wanted - dt / POLISI.decay, 0, 5);
+      // Wanted tinggi menghilang lebih lambat: makin dicari, makin lama reda.
+      const lajuReda = POLISI.decay * (1 + state.wanted * POLISI.pengaliDecay);
+      state.wanted = batas(state.wanted - dt / lajuReda, 0, 5);
       hud.aturWanted(Math.round(state.wanted));
       if (state.wanted <= 0) sound.sirene(false);
+    }
+
+    // Roadblock: wanted 3+ memasang palang di depan arah laju pemain.
+    state.roadblockCd -= dt;
+    if (state.wanted >= POLISI.roadblockWanted && !roadblock.aktif && state.roadblockCd <= 0) {
+      const arah = pemain.diMobil ? pemain.heading : pemain.heading;
+      const bx = pemain.pos.x + Math.sin(arah) * POLISI.jarakRoadblock;
+      const bz = pemain.pos.z + Math.cos(arah) * POLISI.jarakRoadblock;
+      roadblock.pasang(
+        batas(bx, -setengahKota, setengahKota),
+        batas(bz, -setengahKota, setengahKota),
+        arah + Math.PI / 2,
+      );
+      hud.kilat('Roadblock di depan! Polisi menutup jalan.', 2.5);
+      sound.sengatanWanted();
+    } else if (state.wanted < POLISI.roadblockWanted && roadblock.aktif) {
+      roadblock.cabut();
+      state.roadblockCd = 6;
     }
 
     siklus.langkah(dt);
@@ -572,18 +687,39 @@ function loop(now) {
       hud.gambarMinimap(pemain.pos, pemain.heading, setengahKota, polisi, penandaPos, lalu, pejalan, pom);
     }
 
-    hud.aturObjektif(misi.teksObjektif(pemain.pos, Math.round(state.wanted)));
+    hud.aturObjektif(misi.teksObjektif(pemain.pos, Math.round(state.wanted), pemain.diMobil?.van === true));
     hud.aturSkor(skor);
     hud.aturJam(siklus.teksJam(), siklus.gelap);
     hud.aturLaju(pemain.diMobil ? pemain.diMobil.laju : pemain.laju, !!pemain.diMobil);
+    } // akhir blok bukan-mode-foto
   }
 
+  // Mode shot 'hujan': tetes tetap jatuh meski permainan tidak dimulai.
+  if (mode !== 'none') hujan.langkah(dt, pemain.pos.x, pemain.pos.z, siklus.hujan);
+
   siklus.terapkan(scene, matahari, ambient, dunia.lampu, bintang, bulan);
+  // Sorot mercusuar berputar dan hanya menyala saat gelap.
+  if (dunia.sorot) {
+    dunia.sorot.material.opacity = siklus.gelap ? 0.35 : 0;
+    dunia.mercusuar.rotation.y += dt * 0.5;
+  }
   // Kamera ikuti-pemain hanya untuk permainan biasa (mode 'none'). Dalam mode
   // shot, kamera pemandangan dari tataShot dipertahankan; kalau tidak, kamera
   // 'chase'/'koin' yang menghadap polisi/koin langsung ditimpa kamera ikuti
   // yang menghadap sebaliknya sehingga subjeknya hilang dari frame.
-  if (mode === 'none') {
+  if (mode === 'none' && state.foto) {
+    // Mode foto: kamera mengorbit pemain, bebas diseret mouse dan di-zoom.
+    const target = pemain.diMobil
+      ? new T.Vector3(pemain.diMobil.pos.x, 1.1, pemain.diMobil.pos.z)
+      : new T.Vector3(pemain.pos.x, 1.5, pemain.pos.z);
+    const r = 10 * zoom;
+    camera.position.set(
+      target.x + Math.sin(yaw) * Math.cos(pitch) * r,
+      target.y + (2.2 - pitch * 5) * zoom,
+      target.z + Math.cos(yaw) * Math.cos(pitch) * r,
+    );
+    camera.lookAt(target.x, target.y + 0.5, target.z);
+  } else if (mode === 'none') {
     const target = pemain.diMobil
       ? new T.Vector3(pemain.diMobil.pos.x, 1.1, pemain.diMobil.pos.z)
       : new T.Vector3(pemain.pos.x, 1.5, pemain.pos.z);
@@ -602,7 +738,7 @@ function loop(now) {
 
 // ---------- mode shot ----------
 const mode = tataShot(query.shot || '', {
-  pemain, kamera: camera, lalu, polisi, pejalan, setengahKota, hud, overlay, siklus,
+  pemain, kamera: camera, lalu, polisi, pejalan, setengahKota, hud, overlay, siklus, roadblock,
 });
 if (mode === 'koin') {
   // Tampilkan koin untuk foto misi keenam (misi tidak aktif di mode shot).
@@ -630,6 +766,9 @@ btnMulai.addEventListener('click', () => {
   misi.indeks = 0;
   misi.aktif = null;
   pemain.nyawa = 100;
+  pemain.stamina = 100;
+  skor.reset();
+  hud.aturSkor(skor);
   begin(false);
 });
 btnLanjut.addEventListener('click', () => begin(true));

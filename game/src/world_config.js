@@ -46,3 +46,21 @@ export function selisihSudut(a, b) {
   while (d < -Math.PI) d += Math.PI * 2;
   return d;
 }
+
+/** Interpolasi sudut a -> b sebesar t lewat jalur terpendek. */
+export function sudutLerp(a, b, t) {
+  return a + selisihSudut(a, b) * batas(t, 0, 1);
+}
+
+/** Format detik jadi "m:ss", dipakai timer misi dan HUD. */
+export function formatWaktu(detik) {
+  const d = Math.max(0, Math.ceil(detik));
+  return `${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')}`;
+}
+
+/** Format jarak: "123 m" di bawah 1 km, "1,2 km" di atasnya. */
+export function formatJarak(meter) {
+  const m = Math.max(0, Math.round(meter));
+  if (m < 1000) return `${m} m`;
+  return `${(m / 1000).toFixed(1).replace('.', ',')} km`;
+}

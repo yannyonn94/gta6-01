@@ -1,6 +1,7 @@
-// [RONDE 4] Polisi: cruiser yang memprediksi gerak pemain dan saling membagi
+// [RONDE 5] Polisi: cruiser yang memprediksi gerak pemain dan saling membagi
 // sisi saat mengejar, jadi kejar-kejaran terasa seperti dikepung. Makin tinggi
-// wanted, makin cepat dan makin akurat prediksinya.
+// wanted, makin cepat dan makin akurat prediksinya. Wanted 3 ke atas memunculkan
+// roadblock di jalan depan pemain.
 import { MOBIL, POLISI } from './config.js';
 import { batas, selisihSudut } from './world_config.js';
 
@@ -24,6 +25,13 @@ export class MobilPolisi {
     this.lampuBiru = new T.Mesh(new T.SphereGeometry(0.14, 8, 6),
       new T.MeshBasicMaterial({ color: 0x2266ff }));
     this.lampuBiru.position.set(0.35, 1.5, -0.2);
+    // Lampu depan: menyala saat gelap supaya cruiser terlihat dari jauh.
+    this.lampuDepanL = new T.Mesh(new T.SphereGeometry(0.12, 8, 6),
+      new T.MeshBasicMaterial({ color: 0x554411 }));
+    this.lampuDepanL.position.set(-0.6, 0.55, 2.16);
+    this.lampuDepanR = this.lampuDepanL.clone();
+    this.lampuDepanR.position.x = 0.6;
+    this.kelompok.add(this.lampuDepanL, this.lampuDepanR);
     const banMat = new T.MeshLambertMaterial({ color: 0x14161a });
     const geoRoda = new T.CylinderGeometry(0.36, 0.36, 0.3, 10);
     this.roda = [];
@@ -43,6 +51,13 @@ export class MobilPolisi {
     this.kedip = 0;
     this.kepala = 0.85 + (indeks % 3) * 0.12;
     this.sisi = indeks % 2 ? 1 : -1;
+  }
+
+  /** Nyalakan/matikan lampu depan (dipanggil tiap frame dari loop utama). */
+  aturLampu(gelap) {
+    const warna = gelap ? 0xffe9a8 : 0x554411;
+    this.lampuDepanL.material.color.setHex(warna);
+    this.lampuDepanR.material.color.setHex(warna);
   }
 
   kejar(dt, sasaran, aktif, kecepatanSasaran = null, rekan = [], wanted = 0) {
@@ -109,4 +124,45 @@ export function buatPolisi(scene, jumlah) {
     daftar.push(p);
   }
   return daftar;
+}
+
+/** Roadblock: dua palang garis merah-putih dan kerucut di seberang jalan. */
+export function buatRoadblock(scene) {
+  const T = window.THREE;
+  const kelompok = new T.Group();
+  const merah = new T.MeshLambertMaterial({ color: 0xc0392b });
+  const putih = new T.MeshLambertMaterial({ color: 0xf2f4f6 });
+  const oranye = new T.MeshLambertMaterial({ color: 0xe67e22 });
+  for (const x of [-2.6, 2.6]) {
+    const palang = new T.Group();
+    const bilah = new T.Mesh(new T.BoxGeometry(4.4, 0.35, 0.3), merah);
+    bilah.position.y = 1.1;
+    const bilah2 = new T.Mesh(new T.BoxGeometry(4.4, 0.35, 0.3), putih);
+    bilah2.position.y = 0.75;
+    const kaki = new T.Mesh(new T.BoxGeometry(0.3, 1.1, 0.6), putih);
+    kaki.position.y = 0.55;
+    palang.add(bilah, bilah2, kaki);
+    palang.position.set(x, 0, 0);
+    kelompok.add(palang);
+  }
+  for (const [x, z] of [[-5, 2.4], [-5, -2.4], [5, 2.4], [5, -2.4]]) {
+    const kerucut = new T.Mesh(new T.ConeGeometry(0.32, 0.9, 8), oranye);
+    kerucut.position.set(x, 0.45, z);
+    kelompok.add(kerucut);
+  }
+  kelompok.visible = false;
+  scene.add(kelompok);
+  return {
+    kelompok,
+    pos: new T.Vector3(),
+    /** Letakkan palang melintang di depan (x, z), menghadap arah heading. */
+    pasang(x, z, heading) {
+      this.pos.set(x, 0, z);
+      kelompok.position.copy(this.pos);
+      kelompok.rotation.y = heading;
+      kelompok.visible = true;
+    },
+    cabut() { kelompok.visible = false; },
+    get aktif() { return kelompok.visible; },
+  };
 }

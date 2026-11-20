@@ -1,5 +1,6 @@
-// [RONDE 4] Pembangun kota: tanah, jalan, blok gedung, lampu, pohon palem,
-// pantai berpasir di selatan, dan dermaga kayu yang menjorok ke laut.
+// [RONDE 5] Pembangun kota: tanah, jalan, blok gedung, lampu, pohon palem,
+// pantai berpasir di selatan, dermaga kayu yang menjorok ke laut,
+// lapak pasar di blok pasar, dan mercusuar di ujung dermaga.
 import { KOTA, WARNA } from './config.js';
 import { acakSeed, acak } from './world_config.js';
 
@@ -48,6 +49,21 @@ export function bangunKota(scene, seed = 1) {
       garis.rotation.x = -Math.PI / 2;
       garis.position.set(c, 0.02, z);
       scene.add(garis);
+    }
+  }
+
+  // Zebra cross di persimpangan: garis putih melintang jalan.
+  const matZebra = new T.MeshBasicMaterial({ color: 0xe8e8e8 });
+  for (let i = 1; i < KOTA.grid; i += 2) {
+    const c = -setengah + i * KOTA.block + i * KOTA.roadWidth + KOTA.roadWidth / 2;
+    for (let j = 1; j < KOTA.grid; j += 2) {
+      const d = -setengah + j * KOTA.block + j * KOTA.roadWidth + KOTA.roadWidth / 2;
+      for (let k = -4; k <= 4; k += 2) {
+        const strip = new T.Mesh(new T.PlaneGeometry(1.1, 3.2), matZebra);
+        strip.rotation.x = -Math.PI / 2;
+        strip.position.set(c + k, 0.02, d + KOTA.roadWidth / 2 + 1.2);
+        scene.add(strip);
+      }
     }
   }
 
@@ -152,5 +168,53 @@ export function bangunKota(scene, seed = 1) {
   dermaga.position.set(0, 0, setengah + 14);
   scene.add(dermaga);
 
-  return { bentang, setengah, jalan, gedung, pohon, lampu, pantai, dermaga };
+  // Lapak pasar di blok pasar (dekat titik misi kantong): meja + atap kain.
+  const warnaLapak = [0xd35400, 0x16a085, 0xc0392b, 0x8e44ad];
+  const lapakPos = [[120, 40], [-90, 110], [30, -60], [60, 120]];
+  for (let i = 0; i < lapakPos.length; i++) {
+    const [lx, lz] = lapakPos[i];
+    const lapak = new T.Group();
+    const meja = new T.Mesh(new T.BoxGeometry(3.4, 1.0, 1.8),
+      new T.MeshLambertMaterial({ color: 0x6b4a2f }));
+    meja.position.y = 0.5;
+    const atapLapak = new T.Mesh(new T.BoxGeometry(3.8, 0.15, 2.4),
+      new T.MeshLambertMaterial({ color: warnaLapak[i % warnaLapak.length] }));
+    atapLapak.position.y = 2.6;
+    lapak.add(meja, atapLapak);
+    for (const [ox, oz] of [[-1.7, -1], [1.7, -1], [-1.7, 1], [1.7, 1]]) {
+      const tiang = new T.Mesh(new T.CylinderGeometry(0.08, 0.08, 2.6, 6),
+        new T.MeshLambertMaterial({ color: 0x333a44 }));
+      tiang.position.set(ox, 1.3, oz);
+      lapak.add(tiang);
+    }
+    lapak.position.set(lx, 0, lz);
+    lapak.rotation.y = rng() * Math.PI;
+    scene.add(lapak);
+  }
+
+  // Mercusuar di ujung dermaga: menara bergaris plus sorot yang berputar.
+  const mercusuar = new T.Group();
+  const menara = new T.Mesh(
+    new T.CylinderGeometry(1.6, 2.2, 16, 10),
+    new T.MeshLambertMaterial({ color: 0xf2f4f6 }),
+  );
+  menara.position.y = 8;
+  const garisMercu = new T.Mesh(
+    new T.CylinderGeometry(1.75, 1.95, 3, 10),
+    new T.MeshLambertMaterial({ color: 0xc0392b }),
+  );
+  garisMercu.position.y = 10;
+  const sorot = new T.Mesh(
+    new T.ConeGeometry(3.2, 26, 12, 1, true),
+    new T.MeshBasicMaterial({
+      color: 0xfff2c0, transparent: true, opacity: 0, side: T.DoubleSide, depthWrite: false,
+    }),
+  );
+  sorot.rotation.z = Math.PI / 2;
+  sorot.position.set(13, 16.4, 0);
+  mercusuar.add(menara, garisMercu, sorot);
+  mercusuar.position.set(0, 0, setengah + 34);
+  scene.add(mercusuar);
+
+  return { bentang, setengah, jalan, gedung, pohon, lampu, pantai, dermaga, mercusuar, sorot };
 }

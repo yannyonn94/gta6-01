@@ -1,5 +1,6 @@
-// [RONDE 4] HUD: wanted, uang, skor, jam, speedometer, bahan bakar, objektif,
-// stamina, dan minimap yang menampilkan lalu lintas, pejalan kaki, dan polisi.
+// [RONDE 5] HUD: wanted, uang, skor, jam, speedometer, bahan bakar, objektif,
+// stamina, cuaca, bar sisa kombo, dan minimap yang menampilkan lalu lintas,
+// pejalan kaki, dan polisi.
 import { KOTA } from './config.js';
 
 export class Hud {
@@ -9,7 +10,9 @@ export class Hud {
     this.elUang = document.getElementById('uang');
     this.elSkor = document.getElementById('skor');
     this.elKombo = document.getElementById('kombo');
+    this.elKomboBar = document.querySelector('#kombobar > div');
     this.elJam = document.getElementById('jam');
+    this.elCuaca = document.getElementById('cuaca');
     this.elLaju = document.getElementById('laju');
     this.elMobil = document.getElementById('namaMobil');
     this.elBahan = document.getElementById('bahan');
@@ -30,6 +33,15 @@ export class Hud {
     for (let i = 0; i < 5; i++) s += i < level ? '★' : '☆';
     this.elWanted.textContent = s;
     this.elWanted.style.color = level >= 3 ? '#ff6b6b' : level > 0 ? '#f2c94c' : '#8b93a3';
+    // Wanted tinggi membuat panel berkedip pelan sebagai peringatan.
+    this.elWanted.parentElement.style.animation = level >= 3 ? 'denyut 1s infinite' : '';
+  }
+
+  /** Label cuaca: teks lengkap ("Hujan deras · Sore" atau "Cerah · Pagi"). */
+  aturCuaca(hujan, periode) {
+    if (!this.elCuaca) return;
+    this.elCuaca.textContent = periode;
+    this.elCuaca.style.color = hujan > 0.3 ? '#9fb4d8' : '#f2c94c';
   }
 
   aturUang(v) { this.elUang.textContent = `$${Math.round(v)}`; }
@@ -50,6 +62,12 @@ export class Hud {
     const label = s.teksKombo || s.teksPengali || s.teksStatus;
     this.elKombo.textContent = label;
     this.elKombo.style.opacity = label ? '1' : '0';
+    // Bar tipis di bawah label kombo: sisa jendela sebelum kombo putus.
+    if (this.elKomboBar) {
+      const f = s.fraksiKombo ?? 0;
+      this.elKomboBar.style.width = `${Math.round(f * 100)}%`;
+      this.elKomboBar.style.opacity = f > 0 ? '1' : '0';
+    }
   }
 
   aturJam(teks, gelap) {
@@ -78,6 +96,12 @@ export class Hud {
     this.elPesan.textContent = teks;
     this.elPesan.style.opacity = '1';
     this.timerPesan = detik;
+  }
+
+  /** Sembunyikan pesan kilat seketika (dipakai saat masuk mode foto). */
+  sembunyikanPesan() {
+    this.timerPesan = 0;
+    this.elPesan.style.opacity = '0';
   }
 
   langkah(dt) {

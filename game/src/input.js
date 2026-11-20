@@ -1,9 +1,12 @@
-// [RONDE 4] Masukan keyboard dan pointer lock. H membunyikan klakson,
+// [RONDE 5] Masukan keyboard dan pointer lock. H membunyikan klakson,
+// F mengaktifkan mode foto, M mematikan suara, R mereset sudut kamera,
 // roda mouse mengatur zoom kamera.
 export const AKSI_MOBIL = 1;
 export const AKSI_TEMBAK = 2;
 export const AKSI_JEDA = 4;
 export const AKSI_KLAKSON = 8;
+export const AKSI_FOTO = 16;
+export const AKSI_BISU = 32;
 
 const ATAS = new Set(['KeyW', 'ArrowUp']);
 const BAWAH = new Set(['KeyS', 'ArrowDown']);
@@ -14,8 +17,10 @@ const MOBIL = new Set(['KeyE']);
 const TEMBAK = new Set(['Space']);
 const JEDA = new Set(['Escape', 'KeyP']);
 const KLAKSON = new Set(['KeyH']);
+const FOTO = new Set(['KeyF']);
+const BISU = new Set(['KeyM']);
 const RESET_ZOOM = new Set(['KeyR']);
-const SEMUA = new Set([...ATAS, ...BAWAH, ...KIRI, ...KANAN, ...LARI, ...MOBIL, ...TEMBAK, ...JEDA, ...KLAKSON, ...RESET_ZOOM]);
+const SEMUA = new Set([...ATAS, ...BAWAH, ...KIRI, ...KANAN, ...LARI, ...MOBIL, ...TEMBAK, ...JEDA, ...KLAKSON, ...FOTO, ...BISU, ...RESET_ZOOM]);
 
 export function buatMasukan(target) {
   const tahan = new Set();
@@ -24,6 +29,9 @@ export function buatMasukan(target) {
   let pitch = -0.18;
   let zoom = 1;
   let terkunci = false;
+  // Mode foto mengizinkan seret mouse tanpa pointer lock; dimatikan di luar itu.
+  let dragBoleh = false;
+  const dragAktif = () => dragBoleh;
 
   window.addEventListener('keydown', (e) => {
     if (tahan.has(e.code)) return;
@@ -32,7 +40,9 @@ export function buatMasukan(target) {
     else if (TEMBAK.has(e.code)) aksi |= AKSI_TEMBAK;
     else if (JEDA.has(e.code)) aksi |= AKSI_JEDA;
     else if (KLAKSON.has(e.code)) aksi |= AKSI_KLAKSON;
-    else if (RESET_ZOOM.has(e.code)) zoom = 1;
+    else if (FOTO.has(e.code)) aksi |= AKSI_FOTO;
+    else if (BISU.has(e.code)) aksi |= AKSI_BISU;
+    else if (RESET_ZOOM.has(e.code)) { zoom = 1; yaw = 0; pitch = -0.18; }
     if (SEMUA.has(e.code)) e.preventDefault();
   });
   window.addEventListener('keyup', (e) => tahan.delete(e.code));
@@ -46,6 +56,15 @@ export function buatMasukan(target) {
     if (!terkunci) return;
     yaw -= e.movementX * 0.0022;
     pitch = Math.max(-1.2, Math.min(0.5, pitch - e.movementY * 0.0022));
+  });
+  // Seret mouse tanpa pointer lock: dipakai mode foto untuk mengorbit kamera.
+  let menyeret = false;
+  target.addEventListener('mousedown', () => { menyeret = true; });
+  window.addEventListener('mouseup', () => { menyeret = false; });
+  window.addEventListener('mousemove', (e) => {
+    if (terkunci || !menyeret || !dragAktif()) return;
+    yaw -= e.movementX * 0.004;
+    pitch = Math.max(-1.2, Math.min(0.5, pitch - e.movementY * 0.004));
   });
   // Roda mouse: zoom kamera masuk/keluar, dibatasi 0.7–1.6.
   target.addEventListener('wheel', (e) => {
@@ -64,5 +83,7 @@ export function buatMasukan(target) {
     pandang() { return { yaw, pitch, zoom }; },
     ambilAksi() { const a = aksi; aksi = 0; return a; },
     get terkunci() { return terkunci; },
+    /** Nyalakan/matikan seret mouse (mode foto). */
+    aturDrag(b) { dragBoleh = !!b; },
   };
 }

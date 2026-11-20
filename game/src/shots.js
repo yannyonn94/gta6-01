@@ -1,5 +1,5 @@
-// [RONDE 4] Mode shot: membaca ?shot=...&seed=N&hour=H dan menata scene.
-// Mode: start, play, chase, drive, koin, end.
+// [RONDE 5] Mode shot: membaca ?shot=...&seed=N&hour=H dan menata scene.
+// Mode: start, play, chase, drive, koin, hujan, end.
 export function bacaQueryShot() {
   const q = new URLSearchParams(window.location.search);
   const hour = q.get('hour');
@@ -38,7 +38,7 @@ export function tataShot(nama, ctx) {
       kamera.lookAt(6.4, 1.6, 46);
       if (hud) {
         hud.tampil(true);
-        hud.aturObjektif('Misi: Kereta Mati — Ambil mobil biru di garasi dan bawa ke dermaga. (42 m)');
+        hud.aturObjektif('Misi 1/7 · Kereta Mati — Ambil mobil biru di garasi dan bawa ke dermaga. (42 m)');
         hud.aturJam(siklus ? siklus.teksJam() : '10:00', false);
       }
       return 'play';
@@ -61,7 +61,7 @@ export function tataShot(nama, ctx) {
       if (hud) {
         hud.tampil(true);
         hud.aturWanted(3);
-        hud.aturObjektif('Misi: Hilang Sejenak — Polisi sudah tahu. Turunkan bintang wanted kamu.');
+        hud.aturObjektif('Misi 3/7 · Hilang Sejenak — Polisi sudah tahu. Turunkan bintang wanted kamu.');
         hud.aturJam(siklus ? siklus.teksJam() : '17:18', false);
       }
       return 'chase';
@@ -79,7 +79,7 @@ export function tataShot(nama, ctx) {
       kamera.lookAt(6, 0.9, -50);
       if (hud) {
         hud.tampil(true);
-        hud.aturObjektif('Misi: Sprint Pantai — Tempuh 420 meter sebelum waktu habis.');
+        hud.aturObjektif('Misi 4/7 · Sprint Pantai — Tempuh 420 meter sebelum waktu habis.');
         hud.aturJam(siklus ? siklus.teksJam() : '17:18', false);
         hud.aturLaju(m.laju, true);
         hud.aturMobil(m.nama);
@@ -99,10 +99,43 @@ export function tataShot(nama, ctx) {
       kamera.lookAt(-142, 1.6, -142);
       if (hud) {
         hud.tampil(true);
-        hud.aturObjektif('Misi: Koin Karang — Kumpulkan 5 koin emas yang tersebar di kota. (0/5)');
+        hud.aturObjektif('Misi 6/7 · Koin Karang — Kumpulkan 5 koin emas yang tersebar di kota. (0/5)');
         hud.aturJam(siklus ? siklus.teksJam() : '10:30', false);
       }
       return 'koin';
+    }
+    case 'hujan': {
+      // Misi ketujuh di tengah badai: van logistik di jalan basah, roadblock di depan.
+      aturJam(15.0);
+      if (siklus) siklus.aturHujan(1);
+      const v = lalu.find((m) => m.van) || lalu[0];
+      pemain.masukMobil(v);
+      v.pengemudi = 'pemain';
+      v.pos.set(-60, 0, 60);
+      v.heading = Math.PI * 0.75;
+      v.laju = 9;
+      v.kelompok.position.copy(v.pos);
+      // Roadblock di depan arah laju van, terlihat dari kamera belakang.
+      if (ctx.roadblock) {
+        ctx.roadblock.pasang(
+          v.pos.x + Math.sin(v.heading) * 26,
+          v.pos.z + Math.cos(v.heading) * 26,
+          v.heading + Math.PI / 2,
+        );
+      }
+      kamera.position.set(-67, 3.8, 67);
+      kamera.lookAt(-45, 1.2, 45);
+      if (hud) {
+        hud.tampil(true);
+        hud.aturWanted(3);
+        hud.aturCuaca(1, siklus ? `${siklus.teksCuaca()} · ${siklus.teksPeriode()}` : 'Hujan deras · Siang');
+        hud.aturObjektif('Misi 7/7 · Badai Karang: 96 m ke gudang (0:48) — roadblock di depan!');
+        hud.aturJam(siklus ? siklus.teksJam() : '15:00', false);
+        hud.aturLaju(v.laju, true);
+        hud.aturMobil(v.nama);
+        hud.aturBahan(v.tangki.teks, false);
+      }
+      return 'hujan';
     }
     case 'end':
       aturJam(22);
@@ -113,6 +146,21 @@ export function tataShot(nama, ctx) {
         hud.aturJam(siklus ? siklus.teksJam() : '22:00', true);
       }
       return 'end';
+    case 'foto': {
+      // Bingkai ala mode foto: HUD disembunyikan, kamera dekat pemain dan van.
+      aturJam(9.5);
+      const v = lalu.find((m) => m.van) || lalu[0];
+      pemain.pos.set(v.pos.x + 3, 0, v.pos.z + 3);
+      pemain.kelompok.position.copy(pemain.pos);
+      pemain.kelompok.rotation.y = Math.PI * 0.8;
+      pemain.faseJalan = 0.6;
+      pemain.animasi();
+      kamera.position.set(v.pos.x + 6, 2.6, v.pos.z - 4);
+      kamera.lookAt(v.pos.x, 1.2, v.pos.z);
+      if (hud) hud.tampil(false);
+      if (overlay) overlay.classList.add('hidden');
+      return 'foto';
+    }
     default:
       return 'none';
   }

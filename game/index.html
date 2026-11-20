@@ -29,6 +29,13 @@
   #nyawa > div { height: 100%; width: 100%; background: var(--hijau); transition: width .2s; }
   #stamina { width: 160px; height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; margin-top: 4px; }
   #stamina > div { height: 100%; width: 100%; background: var(--hijau); transition: width .2s; }
+  #kombobar { width: 120px; height: 4px; background: rgba(255,255,255,.12); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+  #kombobar > div { height: 100%; width: 0%; background: var(--aksen); opacity: 0; transition: width .1s linear; }
+  #cuaca { font-size: 13px; font-weight: 600; letter-spacing: 1px; }
+  @keyframes denyut { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+  #modefoto { position: absolute; left: 50%; top: 16px; transform: translateX(-50%);
+    font-size: 13px; color: #fff; display: none; }
+  #modefoto.on { display: block; }
 
   #objektif { position: absolute; top: 92px; left: 14px; max-width: 46ch; font-size: 13px; line-height: 1.35; color: #dbe3ee; }
 
@@ -64,12 +71,13 @@
 
 <div id="hud">
   <div id="topbar">
-    <div class="panel"><span id="wanted">☆☆☆☆☆</span> <span id="jam">08:30</span></div>
+    <div class="panel"><span id="wanted">☆☆☆☆☆</span> <span id="jam">08:30</span> <span id="cuaca">Pagi</span></div>
   </div>
   <div id="statbar">
     <div class="panel">
       <div><span id="uang">$0</span> &nbsp; <span id="skor">0</span></div>
       <div id="kombo"></div>
+      <div id="kombobar"><div></div></div>
     </div>
     <div class="panel">
       <div>Nyawa</div>
@@ -85,15 +93,17 @@
     <div id="bahan">BBM 100%</div>
   </div>
   <div id="pesan" class="panel"></div>
+  <div id="modefoto" class="panel">MODE FOTO — seret mouse untuk mengorbit, roda mouse zoom, F untuk kembali</div>
   <canvas id="minimap" width="168" height="168"></canvas>
 </div>
 
 <div id="overlay">
   <div class="kartu">
-    <h1>KOTA KARANG</h1>
-    <h2>Kota pesisir terbuka. Enam misi, kejar-kejaran, koin emas, dan hidupmu.</h2>
-    <p>WASD bergerak · Shift lari (pakai stamina) · Spasi tembak / rem · E masuk-keluar mobil · H klakson · roda mouse zoom kamera · Esc jeda · klik layar untuk mengunci kursor.</p>
-    <p>Mode screenshot: <code>?shot=start|play|chase|drive|koin|end</code> dengan <code>&amp;seed=</code> dan <code>&amp;hour=</code>.</p>
+    <h1 id="judulOverlay">KOTA KARANG</h1>
+    <h2>Kota pesisir terbuka. Tujuh misi, hujan badai, kejar-kejaran, koin emas, dan hidupmu.</h2>
+    <p>WASD bergerak · Shift lari (pakai stamina) · Spasi tembak / rem · E masuk-keluar mobil · H klakson · F mode foto · M bisukan suara · R reset kamera · roda mouse zoom kamera · Esc jeda · klik layar untuk mengunci kursor.</p>
+    <p id="infoJeda"></p>
+    <p>Mode screenshot: <code>?shot=start|play|chase|drive|koin|hujan|foto|end</code> dengan <code>&amp;seed=</code> dan <code>&amp;hour=</code>.</p>
     <button id="btn-start">Mulai baru</button>
     <button id="btn-continue" class="ghost">Lanjutkan</button>
   </div>

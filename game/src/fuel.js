@@ -1,26 +1,32 @@
-// [RONDE 4] Bahan bakar mobil dan pom bensin.
+// [RONDE 5] Bahan bakar mobil dan pom bensin.
 // Mobil punya tangki; bahan bakar turun saat menempuh jarak. Dua pom bensin
 // (barat-laut dan tenggara) mengisi ulang perlahan selama mobil berhenti di atasnya.
+// Tangki bisa dibuat lebih besar (misalnya van logistik).
 import { BAHAN, WARNA } from './config.js';
 import { batas } from './world_config.js';
 
 export class Tangki {
-  constructor() {
-    this.isi = BAHAN.kapasitas;
+  constructor(kapasitas = BAHAN.kapasitas) {
+    this.kapasitas = kapasitas;
+    this.isi = kapasitas;
   }
 
   pakai(jarak) {
-    this.isi = batas(this.isi - jarak * BAHAN.pakai, 0, BAHAN.kapasitas);
+    this.isi = batas(this.isi - jarak * BAHAN.pakai, 0, this.kapasitas);
   }
 
   isiUlang(dt) {
-    this.isi = batas(this.isi + BAHAN.isi * dt, 0, BAHAN.kapasitas);
+    this.isi = batas(this.isi + BAHAN.isi * dt, 0, this.kapasitas);
   }
 
   get kosong() { return this.isi <= 0.5; }
   get rendah() { return this.isi <= BAHAN.rendah; }
-  get penuh() { return this.isi >= BAHAN.kapasitas - 0.5; }
-  get teks() { return `${Math.round(this.isi)}%`; }
+  get penuh() { return this.isi >= this.kapasitas - 0.5; }
+  /** Isi sebagai persen kapasitas, dipakai HUD. */
+  get persen() { return Math.round((this.isi / this.kapasitas) * 100); }
+  get teks() { return `${this.persen}%`; }
+  /** Perkiraan jarak tempuh tersisa (meter) dengan pemakaian saat ini. */
+  sisaJarak() { return Math.round(this.isi / BAHAN.pakai); }
 }
 
 /** Pom bensin terdekat dari (x, z) beserta jaraknya. */
@@ -63,6 +69,14 @@ function bangunSatuPom(scene, T, x, z) {
     pompa.position.set(x + ox, 1.0, z);
     scene.add(pompa);
   }
+
+  // Papan nama pom: kotak hijau terang supaya mudah ditemukan dari jauh.
+  const papan = new T.Mesh(
+    new T.BoxGeometry(6, 1.4, 0.4),
+    new T.MeshBasicMaterial({ color: WARNA.bensin }),
+  );
+  papan.position.set(x, 6.6, z);
+  scene.add(papan);
 }
 
 /** Bangun dua pom bensin dan kembalikan posisinya. */

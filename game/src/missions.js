@@ -1,6 +1,8 @@
-// [RONDE 4] Enam misi: curi mobil, kumpul kantong, hilangkan wanted, sprint,
-// parkir presisi, dan koin Karang. Setiap misi punya objektif dan penanda yang jelas.
+// [RONDE 5] Tujuh misi: curi mobil, kumpul kantong, hilangkan wanted, sprint,
+// parkir presisi, koin Karang, dan antar van saat badai. Setiap misi punya
+// objektif dan penanda yang jelas.
 import { MISI, KOINS } from './config.js';
+import { formatJarak, formatWaktu } from './world_config.js';
 
 export const DAFTAR_MISI = [
   {
@@ -45,6 +47,12 @@ export const DAFTAR_MISI = [
       { x: 0, z: 0, diambil: false },
     ],
   },
+  {
+    id: 'm7', judul: 'Badai Karang',
+    briefing: 'Hujan deras. Ambil van logistik di dekat pasar dan antar ke gudang pantai barat sebelum waktu habis.',
+    jenis: 'antar', waktu: 60, target: { x: -150, z: 150 }, hadiah: MISI.hadiah[6],
+    butuhVan: true,
+  },
 ];
 
 export class MisiState {
@@ -77,29 +85,35 @@ export class MisiState {
     this.posAkhir = { x: pos.x, z: pos.z };
   }
 
-  teksObjektif(pos, wanted) {
+  teksObjektif(pos, wanted, diVan = false) {
     const m = this.aktif;
     if (!m) return 'Misi: —';
+    const nomor = `Misi ${this.indeks + 1}/${DAFTAR_MISI.length} · `;
     if (m.jenis === 'curi') {
       const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
-      return `${m.judul}: ${m.briefing} (${Math.round(d)} m)`;
+      return `${nomor}${m.judul}: ${m.briefing} (${formatJarak(d)})`;
     }
     if (m.jenis === 'kumpul') {
-      return `${m.judul}: ${this.terkumpul}/${m.jumlah} kantong (${Math.max(0, Math.ceil(this.sisa))} d)`;
+      return `${nomor}${m.judul}: ${this.terkumpul}/${m.jumlah} kantong (${formatWaktu(this.sisa)})`;
     }
     if (m.jenis === 'hindar') {
-      return `${m.judul}: turunkan wanted (${wanted > 0 ? `${wanted}★` : 'bersih'})`;
+      return `${nomor}${m.judul}: turunkan wanted (${wanted > 0 ? `${wanted}★` : 'bersih'})`;
     }
     if (m.jenis === 'sprint') {
-      return `${m.judul}: ${Math.round(this.jarak)}/${m.jarak} m (${Math.max(0, Math.ceil(this.sisa))} d)`;
+      return `${nomor}${m.judul}: ${Math.round(this.jarak)}/${m.jarak} m (${formatWaktu(this.sisa)})`;
     }
     if (m.jenis === 'parkir') {
       const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
-      return `${m.judul}: ${Math.round(d)} m, berhenti di zona (${Math.max(0, Math.ceil(this.sisa))} d)`;
+      return `${nomor}${m.judul}: ${formatJarak(d)}, berhenti di zona (${formatWaktu(this.sisa)})`;
     }
     if (m.jenis === 'koin') {
-      return `${m.judul}: ${this.terkumpul}/${m.jumlah} koin (${Math.max(0, Math.ceil(this.sisa))} d)`;
+      return `${nomor}${m.judul}: ${this.terkumpul}/${m.jumlah} koin (${formatWaktu(this.sisa)})`;
     }
-    return m.judul;
+    if (m.jenis === 'antar') {
+      const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
+      const naik = m.butuhVan && !diVan ? ' — ambil van dulu!' : '';
+      return `${nomor}${m.judul}: ${formatJarak(d)} ke gudang (${formatWaktu(this.sisa)})${naik}`;
+    }
+    return `${nomor}${m.judul}`;
   }
 }

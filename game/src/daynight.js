@@ -1,7 +1,7 @@
-// [RONDE 4] Siklus siang-malam: matahari berputar, langit berubah, lampu
+// [RONDE 5] Siklus siang-malam: matahari berputar, langit berubah, lampu
 // kota menyala saat gelap, bintang dan bulan muncul di malam hari,
-// dan jam bisa diatur untuk mode screenshot.
-import { HARI } from './config.js';
+// hujan menggelapkan langit, dan jam bisa diatur untuk mode screenshot.
+import { HARI, HUJAN } from './config.js';
 import { batas } from './world_config.js';
 
 const GELAP = 0x0a0f1e;
@@ -43,6 +43,43 @@ export function buatBulan(scene) {
   return bulan;
 }
 
+/** Hujan: titik-titik jatuh di sekitar titik pusat, mengikuti pemain. */
+export function buatHujan(scene, jumlah = 700) {
+  const T = window.THREE;
+  const pos = new Float32Array(jumlah * 3);
+  for (let i = 0; i < jumlah; i++) {
+    pos[i * 3] = (Math.random() - 0.5) * 90;
+    pos[i * 3 + 1] = Math.random() * 30;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 90;
+  }
+  const geo = new T.BufferGeometry();
+  geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+  const mat = new T.PointsMaterial({
+    color: 0xaec6e0, size: 0.22, sizeAttenuation: true, transparent: true, opacity: 0,
+  });
+  const hujan = new T.Points(geo, mat);
+  hujan.visible = false;
+  scene.add(hujan);
+  return {
+    mesh: hujan,
+    /** Jatuhkan tetes dan pusatkan awan hujan di atas (x, z). */
+    langkah(dt, x, z, intensitas) {
+      const p = geo.attributes.position.array;
+      for (let i = 0; i < jumlah; i++) {
+        p[i * 3 + 1] -= dt * 26;
+        if (p[i * 3 + 1] < 0) {
+          p[i * 3 + 1] = 24 + Math.random() * 6;
+          p[i * 3] = x + (Math.random() - 0.5) * 90;
+          p[i * 3 + 2] = z + (Math.random() - 0.5) * 90;
+        }
+      }
+      geo.attributes.position.needsUpdate = true;
+      hujan.visible = intensitas > 0.02;
+      mat.opacity = Math.min(0.85, intensitas * 0.85);
+    },
+  };
+}
+
 function campur(a, b, t) {
   const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
   const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
@@ -56,9 +93,29 @@ function campur(a, b, t) {
 export class SiklusHari {
   constructor() {
     this.jam = HARI.mulai;
+    this.hujan = 0; // 0 cerah .. 1 hujan deras
   }
 
   aturJam(h) { this.jam = ((h % 24) + 24) % 24; }
+
+  /** Set intensitas hujan 0..1; langit ikut menggelap. */
+  aturHujan(v) { this.hujan = batas(v, 0, 1); }
+
+  /** Nama periode hari untuk HUD: Pagi, Siang, Sore, atau Malam. */
+  teksPeriode() {
+    const j = this.jam;
+    if (j < 5 || j >= 20) return 'Malam';
+    if (j < 11) return 'Pagi';
+    if (j < 16) return 'Siang';
+    return 'Sore';
+  }
+
+  /** Nama cuaca dari intensitas hujan: Cerah, Hujan, atau Hujan deras. */
+  teksCuaca() {
+    if (this.hujan > 0.6) return 'Hujan deras';
+    if (this.hujan > 0.3) return 'Hujan';
+    return 'Cerah';
+  }
 
   langkah(dt) { this.jam = (this.jam + (dt / HARI.detik) * 24) % 24; }
 
@@ -73,12 +130,15 @@ export class SiklusHari {
 
   warnaLangit() {
     const j = this.jam;
-    if (j < 5 || j >= 20) return GELAP;
-    if (j < 8) return campur(GELAP, FAJAR, (j - 5) / 3);
-    if (j < 12) return campur(FAJAR, TENGAH, (j - 8) / 4);
-    if (j < 17) return TENGAH;
-    if (j < 20) return campur(TENGAH, SENJA, (j - 17) / 3);
-    return GELAP;
+    let dasar;
+    if (j < 5 || j >= 20) dasar = GELAP;
+    else if (j < 8) dasar = campur(GELAP, FAJAR, (j - 5) / 3);
+    else if (j < 12) dasar = campur(FAJAR, TENGAH, (j - 8) / 4);
+    else if (j < 17) dasar = TENGAH;
+    else if (j < 20) dasar = campur(TENGAH, SENJA, (j - 17) / 3);
+    else dasar = GELAP;
+    // Hujan menarik langit ke arah abu-abu gelap.
+    return campur(dasar, 0x4a5560, this.hujan * HUJAN.gelap);
   }
 
   /** Terapkan ke scene: latar, kabut, matahari, cahaya ambient, bintang, bulan. */
@@ -91,8 +151,8 @@ export class SiklusHari {
     const sudut = ((this.jam - 6) / 12) * Math.PI;
     matahari.position.set(Math.cos(sudut) * 240, Math.max(14, Math.sin(sudut) * 200), 80);
     // Senja/malam tetap bisa dimainkan: cahaya minimum dinaikkan supaya
-    // polisi dan mobil tetap terlihat, bukan siluet hitam.
-    matahari.intensity = 0.28 + 0.72 * t;
+    // polisi dan mobil tetap terlihat, bukan siluet hitam. Hujan meredupkan lagi.
+    matahari.intensity = (0.28 + 0.72 * t) * (1 - this.hujan * 0.45);
     matahari.color.setHex(t > 0.6 ? 0xfff2d0 : t > 0.2 ? 0xffc48a : 0x9fb4d8);
 
     ambient.intensity = 0.38 + 0.5 * t;

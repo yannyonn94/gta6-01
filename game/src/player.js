@@ -1,5 +1,6 @@
-// [RONDE 4] Pemain: tubuh kecil yang berjalan/lari dan bisa masuk mobil.
+// [RONDE 5] Pemain: tubuh kecil yang berjalan/lari dan bisa masuk mobil.
 // Lari (Shift) memakai stamina: habis berarti jalan biasa sampai pulih.
+// Diam mempercepat pemulihan stamina; misi yang selesai memulihkan nyawa.
 import { ORANG, STAMINA } from './config.js';
 import { batas } from './world_config.js';
 
@@ -40,6 +41,18 @@ export class Pemain {
   /** Apakah pemain masih bisa lari (stamina di atas ambang). */
   get bisaLari() { return this.stamina > STAMINA.ambangLari; }
 
+  /** Pulihkan nyawa (misalnya saat misi selesai), dibatasi 100. */
+  pulihNyawa(n) {
+    this.nyawa = batas(this.nyawa + n, 0, ORANG.nyawa);
+    return this.nyawa;
+  }
+
+  /** Kurangi nyawa karena tabrakan atau tertembak, dibatasi 0. */
+  terluka(n) {
+    this.nyawa = batas(this.nyawa - n, 0, ORANG.nyawa);
+    return this.nyawa;
+  }
+
   lentur(dt, aksi, yawKamera, batasDunia) {
     if (this.diMobil) return;
     let mx = aksi.x, mz = aksi.y;
@@ -47,7 +60,8 @@ export class Pemain {
     // Lari hanya jika Shift ditahan DAN stamina cukup; kalau tidak, jalan biasa.
     const mauLari = aksi.lari && this.bisaLari;
     if (mauLari && bergerak) this.stamina = Math.max(0, this.stamina - STAMINA.habisLari * dt);
-    else this.stamina = Math.min(STAMINA.maks, this.stamina + STAMINA.pulih * dt);
+    // Diam memulihkan stamina lebih cepat daripada sambil berjalan.
+    else this.stamina = Math.min(STAMINA.maks, this.stamina + STAMINA.pulih * (bergerak ? 1 : 1.6) * dt);
     const sasaran = bergerak ? (mauLari ? ORANG.lari : ORANG.jalan) : 0;
     this.laju += (sasaran - this.laju) * Math.min(1, dt * 10);
 

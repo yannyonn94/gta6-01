@@ -1,4 +1,4 @@
-// [RONDE 4] Server statis kecil untuk mengunjungi game.
+// [RONDE 5] Server statis kecil untuk mengunjungi game.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -7,10 +7,12 @@ const root = join(process.cwd(), 'game');
 const types: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.jpg': 'image/jpeg',
   '.png': 'image/png',
+  '.webp': 'image/webp',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
   '.svg': 'image/svg+xml',
@@ -27,15 +29,19 @@ createServer(async (req, res) => {
       return;
     }
     const body = await readFile(file);
-    // HTML tidak di-cache supaya revisi game langsung terlihat.
+    // HTML dan JS tidak di-cache supaya revisi game langsung terlihat.
     const headers: Record<string, string> = {
       'content-type': types[extname(file)] ?? 'application/octet-stream',
+      'content-length': String(body.length),
     };
-    if (extname(file) === '.html') headers['cache-control'] = 'no-store';
+    if (extname(file) === '.html' || extname(file) === '.js') headers['cache-control'] = 'no-store';
     res.writeHead(200, headers);
-    res.end(body);
+    // HEAD hanya meminta header, tanpa isi.
+    res.end(req.method === 'HEAD' ? undefined : body);
     if (process.env.VERBOSE) console.log(`${req.method} ${url.pathname} -> 200`);
   } catch {
+    // 404 dicatat supaya berkas hilang ketahuan saat playtest.
+    if (process.env.VERBOSE) console.log(`${req.method} ${req.url ?? '/'} -> 404`);
     res.writeHead(404).end('Not found');
   }
 }).listen(port, () => console.log(`Kota Karang berjalan di http://127.0.0.1:${port}/`));
