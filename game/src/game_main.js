@@ -540,6 +540,7 @@ if (mode !== 'none') {
   requestAnimationFrame(loop);
 }
 
+window.__kotaDebug = () => ({ started: state.started, paused: state.paused, misi: misi.indeks, aktif: misi.aktif?.id ?? null, wanted: state.wanted });
 btnMulai.addEventListener('click', () => {
   localStorage.removeItem(KUNCI_SIMPAN);
   state.wanted = 0;
