@@ -1,6 +1,6 @@
-// Kota Karang — an original open-world crime game entry for make.fun gta6-01.
-// Entry point: builds the world, runs the loop, wires input, HUD, missions,
-// wanted level, save/continue and the ?shot= scenes used for screenshots.
+// [RONDE 2] Kota Karang — game open-world orisinal untuk make.fun gta6-01.
+// Entry point: membangun kota, menjalankan loop, input, HUD (jam/skor/speedometer),
+// misi, wanted, siklus siang-malam, peluru, serta scene ?shot= untuk screenshot.
 import { buildCity } from './city.js';
 import { Player } from './player.js';
 import { Car, spawnTraffic } from './vehicles.js';
@@ -10,8 +10,10 @@ import { MissionState, MISSIONS } from './missions.js';
 import { Hud } from './hud.js';
 import { createInput, ACTION_CAR, ACTION_FIRE, ACTION_PAUSE } from './input.js';
 import { GtaSound } from './gta_sound.js';
+import { DayNight } from './daynight.js';
+import { Score } from './score.js';
 import { readShotQuery, stageShot } from './shots.js';
-import { CAR, TRAFFIC, PEDS, POLICE, MISSION, SAVE_KEY } from './config.js';
+import { CAR, TRAFFIC, PEDS, POLICE, MISSION, SCORE, DAY, SAVE_KEY } from './config.js';
 import { clamp } from './world_config.js';
 
 const T = window.THREE;
@@ -30,10 +32,16 @@ scene.fog = new T.Fog(0x87b5d9, 120, 420);
 
 const camera = new T.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 900);
 
-scene.add(new T.HemisphereLight(0xbfdcff, 0x3a4a3a, 0.85));
+const hemi = new T.HemisphereLight(0xbfdcff, 0x3a4a3a, 0.85);
+scene.add(hemi);
 const sun = new T.DirectionalLight(0xfff2d0, 0.9);
 sun.position.set(-120, 180, 90);
 scene.add(sun);
+
+// ---------- siklus siang-malam & skor ----------
+const daynight = new DayNight();
+if (shot.hour !== null) daynight.setHour(shot.hour);
+const score = new Score();
 
 // ---------- world ----------
 const city = buildCity(scene, shot.seed);
@@ -45,11 +53,12 @@ const traffic = spawnTraffic(scene, city.roads, TRAFFIC.count);
 const peds = spawnPedestrians(scene, half, PEDS.count);
 const police = spawnPolice(scene, POLICE.count);
 
-// parked cars to steal
+const CAR_NAMES = ['Sedan Kota', 'Coupe Biru', 'Station Hijau', 'Pickup Kuning'];
 const parked = [];
 const PARK_COLORS = [0xc0392b, 0x2980b9, 0x27ae60, 0xf39c12];
 for (let i = 0; i < 8; i++) {
   const c = new Car(scene, PARK_COLORS[i % 4]);
+  c.name = CAR_NAMES[i % CAR_NAMES.length];
   const along = -half + 20 + i * 110;
   c.pos.set((i % 2 ? -1 : 1) * (6 + (i % 3)), 0, along);
   c.heading = i % 2 ? Math.PI / 2 : -Math.PI / 2;
@@ -80,8 +89,10 @@ function save() {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       cash: state.cash,
       wanted: state.wanted,
+      score: score.value,
       pos: { x: player.pos.x, z: player.pos.z },
       missionIndex: missions.index,
+      hour: daynight.hour,
     }));
   } catch {}
 }
@@ -93,8 +104,10 @@ function load() {
     const d = JSON.parse(raw);
     state.cash = d.cash ?? 0;
     state.wanted = d.wanted ?? 0;
+    score.value = d.score ?? 0;
     player.pos.set(d.pos?.x ?? 0, 0, d.pos?.z ?? 0);
     missions.index = d.missionIndex ?? 0;
+    if (typeof d.hour === 'number') daynight.setHour(d.hour);
     return true;
   } catch {
     return false;
@@ -116,6 +129,7 @@ function begin(fresh) {
   if (fresh && !state.started) {
     state.cash = 0;
     state.wanted = 0;
+    score.value = 0;
     missions.index = 0;
     missions.active = null;
     try { localStorage.removeItem(SAVE_KEY); } catch {}
@@ -128,6 +142,7 @@ function begin(fresh) {
   hud.show(true);
   hud.setCash(state.cash);
   hud.setWanted(state.wanted);
+  hud.setScore(score);
   sound.resume();
   sound.music(true);
   if (!missions.active) startMission(MISSIONS[missions.index]);
@@ -136,8 +151,9 @@ function begin(fresh) {
 btnStart.addEventListener('click', () => begin(true));
 btnContinue.addEventListener('click', () => begin(false));
 
-// ---------- shooting ----------
+// ---------- peluru ----------
 const bullets = [];
+const BULLET_SPEED = 42;
 function fireBullet() {
   const dir = new T.Vector3();
   camera.getWorldDirection(dir);
@@ -155,14 +171,48 @@ function fireBullet() {
   addWanted(0.4);
 }
 
+function updateBullets(dt) {
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.mesh.position.addScaledVector(b.dir, BULLET_SPEED * dt);
+    b.life -= dt;
+    let hit = false;
+
+    for (const p of police) {
+      if (!p.group.visible) continue;
+      if (b.mesh.position.distanceToSquared(p.pos) < 5.5) {
+        p.speed *= 0.2;
+        score.add(SCORE.policeDown, 'Polisi');
+        hud.flash('Polisi tumbang +120', 1.6);
+        hit = true;
+        break;
+      }
+    }
+    if (!hit) {
+      for (const p of peds) {
+        if (b.mesh.position.distanceToSquared(p.pos) < 2.2) {
+          score.add(SCORE.pedDown, 'Pejalan kaki');
+          hit = true;
+          break;
+        }
+      }
+    }
+
+    if (hit || b.life <= 0) {
+      scene.remove(b.mesh);
+      bullets.splice(i, 1);
+    }
+  }
+}
+
 function addWanted(amount) {
+  const before = state.wanted;
   state.wanted = clamp(state.wanted + amount, 0, 5);
+  if (state.wanted > before) state.wantedTimer = POLICE.wantedDecaySeconds;
   hud.setWanted(state.wanted);
 }
 
 // ---------- wanted / police ----------
-// [REVISI thinking_revised] Wanted decay keeps the wantedTimer fresh, so evading police and
-// stopping crime properly lowers the wanted level instead of it ticking down mid-chase.
 function updateWanted(dt) {
   if (state.wanted > 0) {
     state.wantedTimer -= dt;
@@ -173,21 +223,23 @@ function updateWanted(dt) {
     }
   }
   const active = state.wanted > 0;
+  const target = player.inCar ? player.inCar.mesh.position : player.pos;
+  const targetVel = player.inCar
+    ? { x: Math.sin(player.inCar.heading) * player.inCar.speed, z: Math.cos(player.inCar.heading) * player.inCar.speed }
+    : { x: Math.sin(player.heading) * player.speed, z: Math.cos(player.heading) * player.speed };
   police.forEach((p, i) => {
     p.group.visible = active && i < state.wanted;
-    if (p.group.visible) {
-      const target = player.inCar ? player.inCar.mesh.position : player.pos;
-      p.update(dt, target, true);
-    }
+    if (p.group.visible) p.update(dt, target, true, targetVel);
   });
   sound.siren(active);
 }
 
-// ---------- mission progress ----------
+// ---------- misi ----------
 function updateMission(dt) {
   const m = missions.active;
   if (!m) return;
   const pos = player.inCar ? player.inCar.mesh.position : player.pos;
+  missions.addDistance(pos);
 
   if (m.kind === 'go' || m.kind === 'steal') {
     const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
@@ -199,6 +251,7 @@ function updateMission(dt) {
       if (Math.hypot(pos.x - spot.x, pos.z - spot.z) < MISSION.pickupRadius) {
         spot.taken = true;
         missions.collected += 1;
+        score.add(SCORE.mission / 3, 'Kantong');
         sound.blip(1200, 0.1, 'sine', 0.3);
         hud.flash(`Kantong ${missions.collected}/${m.count}`, 1.6);
       }
@@ -207,13 +260,19 @@ function updateMission(dt) {
     if (missions.timer <= 0) failMission('Waktu habis.');
   } else if (m.kind === 'evade') {
     if (state.wanted === 0) completeMission(m);
+  } else if (m.kind === 'race') {
+    missions.timer -= dt;
+    if (missions.distance >= m.distance) completeMission(m);
+    if (missions.timer <= 0) failMission('Waktu habis.');
   }
   hud.setObjective(missions.objectiveText(pos, state.wanted));
 }
 
 function completeMission(m) {
   state.cash += m.reward;
+  score.add(SCORE.mission, m.title);
   hud.setCash(state.cash);
+  hud.setScore(score);
   hud.flash(`Selesai: ${m.title} (+$${m.reward})`, 3);
   sound.blip(1040, 0.2, 'triangle', 0.3);
   missions.active = null;
@@ -228,7 +287,7 @@ function failMission(text) {
   setTimeout(() => { if (state.started && !missions.active) startMission(MISSIONS[missions.index]); }, 2200);
 }
 
-// ---------- car enter / exit ----------
+// ---------- masuk / keluar mobil ----------
 function nearestCar() {
   let best = null, bd = CAR.enterRange;
   const all = [...traffic, ...parked];
@@ -245,6 +304,7 @@ function toggleCar() {
     car.driver = null;
     player.exitCar();
     state.currentCar = null;
+    hud.setCar('');
     sound.engine(0);
     return;
   }
@@ -253,12 +313,13 @@ function toggleCar() {
   player.enterCar(car);
   car.driver = 'player';
   state.currentCar = car;
+  hud.setCar(car.name || 'Mobil');
   addWanted(CAR.stealWanted);
   hud.flash('Mobil dicuri', 1.4);
   sound.blip(440, 0.1, 'square', 0.2);
 }
 
-// ---------- driving ----------
+// ---------- mengemudi ----------
 function driveCar(dt, move) {
   const car = player.inCar;
   if (!car) return;
@@ -276,7 +337,7 @@ function driveCar(dt, move) {
   sound.engine(Math.abs(car.speed) / top);
 }
 
-// ---------- camera ----------
+// ---------- kamera ----------
 function updateCamera(dt, yaw) {
   if (player.inCar) {
     const car = player.inCar;
@@ -295,15 +356,18 @@ function updateCamera(dt, yaw) {
   }
 }
 
-// ---------- shot mode ----------
-const shotCtx = { player, camera, traffic, police, pedestrians: peds, cityHalf: half, hud, overlay };
+// ---------- mode shot ----------
+const shotCtx = { player, camera, traffic, police, pedestrians: peds, cityHalf: half, hud, overlay, daynight };
 const staged = state.started ? '' : stageShot(shot.shot, shotCtx);
 
-// ---------- main loop ----------
+// ---------- loop ----------
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
+
+  daynight.update(dt);
+  daynight.apply(scene, sun, hemi);
 
   if (state.started && !state.paused && !state.over) {
     const actions = input.takeActions();
@@ -322,11 +386,18 @@ function frame(now) {
     updateCamera(dt, look.yaw);
 
     for (const t of traffic) if (t.driver === 'traffic') t.update(dt);
-    for (const p of peds) p.update(dt, player.pos, state.wanted > 0);
+    const cars = [...traffic, ...parked];
+    for (const p of peds) p.update(dt, player.pos, state.wanted > 0, cars);
     updateWanted(dt);
     updateMission(dt);
+    updateBullets(dt);
+    score.update(dt);
     hud.update(dt);
-    const marker = missions.active?.target ?? missions.active?.spots?.find((s) => !s.taken) ?? null;
+    hud.setScore(score);
+    hud.setClock(daynight.clockText(), daynight.isNight);
+    hud.setSpeed(player.inCar ? player.inCar.speed : player.speed, !!player.inCar);
+
+    const marker = missions.active?.target ?? missions.active?.start ?? null;
     hud.drawMinimap(
       player.inCar ? player.inCar.mesh.position : player.pos,
       player.inCar ? player.inCar.heading : player.heading,
@@ -352,4 +423,4 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-console.log('[kota-karang]', staged || 'free play', 'seed', shot.seed);
+console.log('[kota-karang]', staged || 'free play', 'seed', shot.seed, 'jam', daynight.clockText());

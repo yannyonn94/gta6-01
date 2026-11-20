@@ -1,10 +1,12 @@
-// [REVISI thinking_revised] Police: patrol cars that chase the player when the wanted level rises.
-import { CAR_SPEED, clamp } from './world_config.js';
+// [RONDE 2] Polisi: cruiser yang mengejar dengan prediksi posisi pemain, jadi
+// kejar-kejaran terasa seperti dikepung, bukan cuma diikuti. Lampu bar
+// berkedip dan kecepatan tiap mobil berbeda-beda.
+import { CAR_SPEED, POLICE, clamp } from './world_config.js';
 
 const T = window.THREE;
 
 export class PoliceCar {
-  constructor(scene) {
+  constructor(scene, seed = 0) {
     this.group = new T.Group();
     const bodyMat = new T.MeshLambertMaterial({ color: 0xf2f4f6 });
     const stripeMat = new T.MeshLambertMaterial({ color: 0x14213d });
@@ -37,25 +39,43 @@ export class PoliceCar {
     this.heading = 0;
     this.speed = 0;
     this.flashing = 0;
+    this.skill = 0.85 + (seed % 3) * 0.12;   // tiap cruiser punya temperamen
+    this.spin = seed % 2 ? 1 : -1;
   }
 
-  update(dt, target, active) {
+  /**
+   * target: posisi pemain; targetVel: kecepatan pemain (bisa null).
+   * Polisi membidik titik di depan pemain, bukan posisi sekarang.
+   */
+  update(dt, target, active, targetVel = null) {
     if (!active) {
       this.speed *= 0.9;
       this.group.position.copy(this.pos);
       return;
     }
-    const dx = target.x - this.pos.x, dz = target.z - this.pos.z;
+    const lead = POLICE.leadTime * (targetVel ? Math.hypot(targetVel.x, targetVel.z) / CAR_SPEED : 0);
+    const aimX = target.x + (targetVel ? targetVel.x : 0) * lead;
+    const aimZ = target.z + (targetVel ? targetVel.z : 0) * lead;
+    const dx = aimX - this.pos.x, dz = aimZ - this.pos.z;
     const dist = Math.hypot(dx, dz);
     const want = Math.atan2(dx, dz);
     let diff = want - this.heading;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    this.heading += clamp(diff, -2.6 * dt, 2.6 * dt);
-    const top = CAR_SPEED * 1.25;
-    this.speed += ((dist > 8 ? top : top * 0.4) - this.speed) * Math.min(1, dt * 1.4);
+    this.heading += clamp(diff, -2.9 * this.skill * dt, 2.9 * this.skill * dt);
+
+    const top = CAR_SPEED * 1.25 * this.skill;
+    const near = dist > 8 ? top : top * 0.4;
+    this.speed += (near - this.speed) * Math.min(1, dt * 1.4);
     this.pos.x += Math.sin(this.heading) * this.speed * dt;
     this.pos.z += Math.cos(this.heading) * this.speed * dt;
+
+    // sentuhan belok: Bergerak ke sisi target saat sudah dekat.
+    if (dist < 14) {
+      this.pos.x += Math.sin(this.heading + Math.PI / 2) * this.spin * dt * 2.2;
+      this.pos.z += Math.cos(this.heading + Math.PI / 2) * this.spin * dt * 2.2;
+    }
+
     this.group.position.copy(this.pos);
     this.group.rotation.y = this.heading;
     for (const w of this.wheels) w.rotation.x += this.speed * dt * 2.2;
@@ -67,11 +87,11 @@ export class PoliceCar {
   }
 }
 
-/** Spawn one cruiser per star of the wanted level, near but not on top of the player. */
+/** Satu cruiser per bintang wanted, ditempatkan melingkar di sekitar pemain. */
 export function spawnPolice(scene, count) {
   const list = [];
   for (let i = 0; i < count; i++) {
-    const car = new PoliceCar(scene);
+    const car = new PoliceCar(scene, i);
     const angle = (i / Math.max(1, count)) * Math.PI * 2 + 0.7;
     car.pos.set(Math.sin(angle) * 55, 0, Math.cos(angle) * 55);
     car.heading = angle + Math.PI;

@@ -1,6 +1,6 @@
-// [REVISI thinking_revised] Pedestrians: simple walkers that stroll the sidewalks and scatter
-// when a wanted level is active.
-import { rand } from './world_config.js';
+// [RONDE 2] Pejalan kaki: berjalan di trotoar, menyeberang jalan di persimpangan,
+// menghindar mobil yang melintas, dan panik bila ada wanted.
+import { PEDS, clamp, rand } from './world_config.js';
 
 const T = window.THREE;
 const SKIN = [0xc98f6b, 0x8d5a3b, 0xe0b48f];
@@ -28,18 +28,53 @@ export class Pedestrian {
     this.speed = rand(0.8, 1.6);
     this.phase = rand(0, 6);
     this.fleeing = false;
+    this.crossing = false;
+    this.waiting = rand(0, 2);
+    this.blocked = false;
   }
 
-  update(dt, playerPos, panic) {
+  /** cek mobil terdekat; pejalan kaki menunggu di tepi bila ada yang lewat. */
+  update(dt, playerPos, panic, cars = []) {
     if (panic) this.fleeing = true;
+
+    // menghindari mobil yang mendekat di depan
+    this.blocked = false;
+    for (const c of cars) {
+      const dx = this.pos.x - c.pos.x, dz = this.pos.z - c.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 7) {
+        const ahead = Math.sin(c.heading) * dx + Math.cos(c.heading) * dz;
+        if (ahead > 0 && Math.abs(d) < 7) { this.blocked = true; break; }
+      }
+    }
+
     if (this.fleeing) {
       const dx = this.pos.x - playerPos.x, dz = this.pos.z - playerPos.z;
       const d = Math.hypot(dx, dz) || 1;
       this.heading = Math.atan2(dx / d, dz / d);
-      this.speed = 3.4;
+      this.speed = PEDS.panicSpeed;
+      this.crossing = false;
+    } else if (this.blocked) {
+      this.speed = 0;
+    } else if (this.crossing) {
+      this.speed = 2.4;
+      this.waiting -= dt;
+      if (this.waiting <= 0) {
+        this.crossing = false;
+        this.heading = rand(0, Math.PI * 2);
+      }
+    } else {
+      this.speed = rand(0.8, 1.6);
+      if (Math.random() < PEDS.crossChance * dt * 0.4) {
+        this.crossing = true;
+        this.waiting = rand(1.2, 2.4);
+        // menyeberang: tegak lurus terhadap arah sebelumnya
+        this.heading += Math.PI / 2;
+      }
     }
-    this.pos.x += Math.sin(this.heading) * this.speed * dt;
-    this.pos.z += Math.cos(this.heading) * this.speed * dt;
+
+    this.pos.x = clamp(this.pos.x + Math.sin(this.heading) * this.speed * dt, -220, 220);
+    this.pos.z = clamp(this.pos.z + Math.cos(this.heading) * this.speed * dt, -220, 220);
     this.phase += this.speed * dt * 2;
     this.group.position.copy(this.pos);
     this.group.rotation.y = this.heading;
@@ -49,7 +84,7 @@ export class Pedestrian {
   }
 }
 
-/** Place walkers on the sidewalks beside random roads. */
+/** Sebar pejalan kaki di trotoar di sepanjang jalan. */
 export function spawnPedestrians(scene, half, count = 22) {
   const list = [];
   for (let i = 0; i < count; i++) {

@@ -1,24 +1,32 @@
-// Shot mode: reads ?shot=...&seed=N from the URL and stages a readable scene,
-// so screenshots are real renders of this game's own code.
+// Mode shot: membaca ?shot=...&seed=N dan menata scene yang jelas, termasuk
+// jam dalam sehari, supaya screenshot adalah render asli kode game.
 export function readShotQuery() {
   const q = new URLSearchParams(window.location.search);
-  return { shot: q.get('shot') ?? '', seed: Number(q.get('seed') ?? '1') || 1 };
+  return {
+    shot: q.get('shot') ?? '',
+    seed: Number(q.get('seed') ?? '1') || 1,
+    hour: q.get('hour') === null ? null : Number(q.get('hour')),
+  };
 }
 
-/** Stage the requested scene. Returns a short description for the console. */
+/** Tata scene yang diminta. Mengembalikan deskripsi singkat untuk konsol. */
 export function stageShot(name, ctx) {
-  const { player, camera, traffic, police, pedestrians, cityHalf, hud, overlay } = ctx;
-  // Hide the title card so the city itself is the subject of the shot.
+  const { player, camera, traffic, police, pedestrians, cityHalf, hud, overlay, daynight } = ctx;
   if (overlay) overlay.classList.add('hidden');
+
+  const setHour = (h) => { if (daynight) daynight.setHour(h); };
+
   switch (name) {
     case 'start':
-      // high vantage over the whole grid: roads, blocks and coast
+      // Pemandangan tinggi siang hari: jalan, blok, dan pantai.
+      setHour(11);
       camera.position.set(0, 150, 230);
       camera.lookAt(0, 0, 0);
       if (hud) hud.show(true);
       return 'start';
     case 'play': {
-      // over-the-shoulder on foot, mid-street, traffic and peds around
+      // Over-the-shoulder di tengah jalan, ada mobil dan pejalan kaki.
+      setHour(10);
       player.pos.set(6, 0, 40);
       player.group.position.copy(player.pos);
       player.group.rotation.y = Math.PI * 0.15;
@@ -29,11 +37,13 @@ export function stageShot(name, ctx) {
       camera.lookAt(6.4, 1.6, 46);
       if (hud) hud.show(true);
       if (hud) hud.setObjective('Misi: Kereta Mati — Ambil mobil biru di garasi dan bawa ke dermaga. (42 m)');
+      if (hud) hud.setClock(daynight ? daynight.clockText() : '10:00', false);
       return 'play';
     }
     case 'chase': {
-      // wanted level: cruisers closing in behind the player on a road
-      const cx = 6, cz = -20;                       // on the north-south road at x=6
+      // Wanted 3 bintang, cruiser mengejar di jalan, senja.
+      setHour(18.5);
+      const cx = 6, cz = -20;
       player.pos.set(cx, 0, cz);
       player.group.position.copy(player.pos);
       player.group.rotation.y = Math.PI;
@@ -49,10 +59,12 @@ export function stageShot(name, ctx) {
       if (hud) hud.show(true);
       if (hud) hud.setWanted(3);
       if (hud) hud.setObjective('Misi: Hilang Sejenak — Polisi sudah tahu. Turunkan bintang wanted kamu.');
+      if (hud) hud.setClock(daynight ? daynight.clockText() : '18:30', false);
       return 'chase';
     }
     case 'drive': {
-      // chase cam behind a moving car on a road
+      // Kamera kejar di belakang mobil, senja.
+      setHour(18.2);
       const car = traffic[0];
       player.enterCar(car);
       car.driver = 'player';
@@ -63,14 +75,19 @@ export function stageShot(name, ctx) {
       camera.position.set(6, 4.0, -68);
       camera.lookAt(6, 0.9, -50);
       if (hud) hud.show(true);
-      if (hud) hud.setObjective('Misi: Kereta Mati — Ambil mobil biru di garasi dan bawa ke dermaga. (152 m)');
+      if (hud) hud.setObjective('Misi: Sprint Pantai — Tempuh 420 meter sebelum waktu habis.');
+      if (hud) hud.setClock(daynight ? daynight.clockText() : '18:12', false);
+      if (hud) hud.setSpeed(car.speed, true);
+      if (hud) hud.setCar('Sedan Kota');
       return 'drive';
     }
     case 'end':
-      // dusk view over the city from the coast
+      // Malam hari di atas kota: lampu menyala.
+      setHour(22);
       camera.position.set(-40, 90, 260);
       camera.lookAt(0, 10, 0);
       if (hud) hud.show(true);
+      if (hud) hud.setClock(daynight ? daynight.clockText() : '22:00', true);
       return 'end';
     default:
       return 'none';

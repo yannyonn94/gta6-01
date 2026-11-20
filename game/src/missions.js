@@ -1,6 +1,5 @@
-// [REVISI thinking_revised] Missions: three authored jobs with clear objectives, markers and rewards.
-// Objective kinds: go (reach a point), steal (bring a car to the drop),
-// collect (pick up bags), evade (lose the wanted level).
+// [RONDE 2] Empat misi: curi mobil, kumpul kantong, hilangkan wanted, dan sprint
+// jarak jauh sebelum waktu habis. Setiap misi punya objektif, penanda, hadiah.
 import { MISSION } from './config.js';
 
 export const MISSIONS = [
@@ -35,27 +34,49 @@ export const MISSIONS = [
     reward: MISSION.rewards[2],
     time: 45,
   },
+  {
+    id: 'm4',
+    title: 'Sprint Pantai',
+    briefing: 'Tempuh 420 meter sebelum waktu habis, kejar-kejaran boleh.',
+    kind: 'race',
+    reward: MISSION.rewards[3],
+    time: 40,
+    distance: MISSION.raceDistance,
+    start: { x: 6, z: 40 },
+  },
 ];
 
 export class MissionState {
   constructor() {
     this.index = 0;
-    this.active = null;     // mission object when running
+    this.active = null;
     this.collected = 0;
     this.timer = 0;
+    this.distance = 0;
+    this.lastPos = null;
   }
 
-  /** (Re)start a mission, clearing any pickups left from an earlier attempt. */
   start(mission) {
     for (const spot of mission.spots ?? []) spot.taken = false;
     this.active = mission;
     this.collected = 0;
     this.timer = mission.time ?? 0;
+    this.distance = 0;
+    this.lastPos = null;
   }
 
   next() {
     this.index = Math.min(this.index + 1, MISSIONS.length - 1);
     return MISSIONS[this.index];
+  }
+
+  /** Tambah jarak tempuh untuk misi sprint; dipanggil tiap frame. */
+  addDistance(pos) {
+    if (this.active?.kind !== 'race') return;
+    if (this.lastPos) {
+      this.distance += Math.hypot(pos.x - this.lastPos.x, pos.z - this.lastPos.z);
+    }
+    this.lastPos = { x: pos.x, z: pos.z };
   }
 
   objectiveText(playerPos, wanted) {
@@ -70,6 +91,10 @@ export class MissionState {
     }
     if (m.kind === 'evade') {
       return `${m.title}: turunkan wanted (${wanted > 0 ? `${wanted}★` : 'bersih'})`;
+    }
+    if (m.kind === 'race') {
+      const left = Math.max(0, m.distance - this.distance);
+      return `${m.title}: ${Math.round(this.distance)}/${m.distance} m (${Math.max(0, Math.ceil(this.timer))} d)`;
     }
     return m.title;
   }

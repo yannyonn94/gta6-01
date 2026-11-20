@@ -1,9 +1,8 @@
-// [REVISI thinking_revised] Every tuning number and colour in one place for Kota Karang, the open world.
-// Distances are metres, speeds metres per second, times seconds.
-
+// [RONDE 2] Semua angka tuning dan warna Kota Karang.
+// Jarak dalam meter, kecepatan meter per detik, waktu dalam detik.
 export const CITY = {
-  grid: 10,          // blocks per side
-  block: 44,         // metres per block
+  grid: 10,
+  block: 44,
   roadWidth: 12,
   sidewalk: 4,
 };
@@ -25,19 +24,28 @@ export const CAR = {
 };
 
 export const TRAFFIC = { count: 14, speed: 9.6 };
-export const PEDS = { count: 22, panicSpeed: 3.4 };
-export const POLICE = { count: 5, topSpeed: 21.9, wantedDecaySeconds: 6 };
+export const PEDS = { count: 22, panicSpeed: 3.4, crossChance: 0.35 };
+export const POLICE = { count: 5, topSpeed: 21.9, wantedDecaySeconds: 6, leadTime: 0.35 };
 
 export const MISSION = {
   arriveRadius: 10,
   pickupRadius: 7,
-  rewards: [400, 550, 300],
+  raceDistance: 420,
+  rewards: [400, 550, 300, 650],
 };
 
-/** The fixed simulation step: the loop catches up in whole steps, never half of one. */
-export const STEP = 1 / 60;
+// Siklus penuh siang-malam berapa detik game, dan jam berapa pemain mulai.
+export const DAY = { seconds: 240, startHour: 8.5 };
 
-/** Longest frame the loop replays; a longer stall (a hidden tab) is dropped. */
+// Skor per aksi, supaya HUD punya angka yang bergerak.
+export const SCORE = {
+  mission: 250,
+  policeDown: 120,
+  pedDown: 40,
+  nearMiss: 15,
+};
+
+export const STEP = 1 / 60;
 export const MAX_FRAME = 0.05;
 
 export const PALETTE = {
@@ -50,7 +58,7 @@ export const PALETTE = {
   policeStripe: 0x14213d,
   trafficBlip: 0xd8b13c,
   pedBlip: 0xb9c2d0,
+  lamp: 0xffe9a8,
 };
 
-/** Where progress is kept between visits (this browser only). */
 export const SAVE_KEY = 'kota-karang.save';

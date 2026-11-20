@@ -1,20 +1,24 @@
-// HUD: wanted stars, cash, health bar, objective text and the minimap canvas.
+// [RONDE 2] HUD: bintang wanted, uang, nyawa, objektif, jam, skor, speedometer,
+// dan minimap yang kini juga menampilkan lampu lalu lintas dan pejalan kaki.
 import { CITY } from './config.js';
 
-// [REVISI] drawMinimap now also draws the mission target, active traffic and pedestrian peds,
-// so a single screenshot can show the mission objective, the wanted level, the chase and the
-// minimap at the same time.
 export class Hud {
   constructor() {
     this.root = document.getElementById('hud');
     this.wantedEl = document.getElementById('wanted');
     this.cashEl = document.getElementById('cash');
+    this.scoreEl = document.getElementById('score');
+    this.comboEl = document.getElementById('combo');
+    this.clockEl = document.getElementById('clock');
+    this.speedEl = document.getElementById('speed');
+    this.carEl = document.getElementById('carname');
     this.objectiveEl = document.getElementById('objective');
     this.msgEl = document.getElementById('msg');
     this.healthEl = document.querySelector('#healthbar > div');
     this.mapCanvas = document.getElementById('minimap');
     this.mapCtx = this.mapCanvas.getContext('2d');
     this.msgTimer = 0;
+    this.lastSpeed = 0;
   }
 
   show(on) { this.root.classList.toggle('on', on); }
@@ -30,6 +34,30 @@ export class Hud {
   setHealth(v) { this.healthEl.style.width = `${Math.max(0, Math.min(100, v))}%`; }
   setObjective(text) { this.objectiveEl.textContent = text; }
 
+  setScore(score) {
+    this.scoreEl.textContent = score.text;
+    const c = score.comboText;
+    this.comboEl.textContent = c;
+    this.comboEl.style.opacity = c ? '1' : '0';
+  }
+
+  setClock(text, night) {
+    this.clockEl.textContent = text;
+    this.clockEl.style.color = night ? '#9fb4d8' : '#f2c94c';
+  }
+
+  /** Kecepatan km/jam; dibulatkan supaya angka tidak bergetar. */
+  setSpeed(ms, inCar) {
+    const kmh = Math.round(Math.abs(ms) * 3.6);
+    if (kmh !== this.lastSpeed) {
+      this.speedEl.textContent = `${kmh}`;
+      this.lastSpeed = kmh;
+    }
+    this.speedEl.parentElement.style.opacity = inCar ? '1' : '0.35';
+  }
+
+  setCar(name) { this.carEl.textContent = name ? name : ''; }
+
   flash(text, seconds = 2.4) {
     this.msgEl.textContent = text;
     this.msgEl.style.opacity = '1';
@@ -43,7 +71,7 @@ export class Hud {
     }
   }
 
-  /** draw a top-down minimap: roads, player arrow, police blips, mission marker, traffic, peds */
+  /** Minimap: jalan, traffic, pejalan kaki, polisi, penanda misi, panah pemain. */
   drawMinimap(playerPos, playerHeading, half, police, marker, traffic = [], peds = []) {
     const ctx = this.mapCtx;
     const size = this.mapCanvas.width;
@@ -54,7 +82,6 @@ export class Hud {
     ctx.fillStyle = 'rgba(10,14,18,.85)';
     ctx.fillRect(0, 0, size, size);
 
-    // road grid
     ctx.strokeStyle = 'rgba(200,205,215,.28)';
     ctx.lineWidth = 2;
     const step = CITY.block + CITY.roadWidth;
@@ -68,35 +95,30 @@ export class Hud {
       ctx.beginPath(); ctx.moveTo(a1, b1); ctx.lineTo(a2, b2); ctx.stroke();
     }
 
-    // traffic
     ctx.fillStyle = '#d8b13c';
     for (const t of traffic) {
       const [tx, ty] = toMap(t.pos.x, t.pos.z);
       ctx.fillRect(tx - 1.5, ty - 1.5, 3, 3);
     }
 
-    // pedestrians
     ctx.fillStyle = '#b9c2d0';
     for (const p of peds) {
       const [qx, qy] = toMap(p.pos.x, p.pos.z);
       ctx.fillRect(qx - 1, qy - 1, 2, 2);
     }
 
-    // mission marker
     if (marker) {
       const [mx, my] = toMap(marker.x, marker.z);
       ctx.fillStyle = '#f2c94c';
       ctx.beginPath(); ctx.arc(mx, my, 5, 0, Math.PI * 2); ctx.fill();
     }
 
-    // police
     ctx.fillStyle = '#4d8dff';
     for (const p of police) {
       const [px, py] = toMap(p.pos.x, p.pos.z);
       ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
     }
 
-    // player arrow
     const [px, py] = toMap(playerPos.x, playerPos.z);
     ctx.save();
     ctx.translate(px, py);
