@@ -1,5 +1,6 @@
-// [RONDE 3] Pemain: tubuh kecil yang berjalan/lari dan bisa masuk mobil.
-import { ORANG } from './config.js';
+// [RONDE 4] Pemain: tubuh kecil yang berjalan/lari dan bisa masuk mobil.
+// Lari (Shift) memakai stamina: habis berarti jalan biasa sampai pulih.
+import { ORANG, STAMINA } from './config.js';
 import { batas } from './world_config.js';
 
 const T = window.THREE;
@@ -32,14 +33,22 @@ export class Pemain {
     this.laju = 0;
     this.diMobil = null;
     this.nyawa = ORANG.nyawa;
+    this.stamina = STAMINA.maks;
     this.faseJalan = 0;
   }
+
+  /** Apakah pemain masih bisa lari (stamina di atas ambang). */
+  get bisaLari() { return this.stamina > STAMINA.ambangLari; }
 
   lentur(dt, aksi, yawKamera, batasDunia) {
     if (this.diMobil) return;
     let mx = aksi.x, mz = aksi.y;
     const bergerak = mx !== 0 || mz !== 0;
-    const sasaran = bergerak ? (aksi.lari ? ORANG.lari : ORANG.jalan) : 0;
+    // Lari hanya jika Shift ditahan DAN stamina cukup; kalau tidak, jalan biasa.
+    const mauLari = aksi.lari && this.bisaLari;
+    if (mauLari && bergerak) this.stamina = Math.max(0, this.stamina - STAMINA.habisLari * dt);
+    else this.stamina = Math.min(STAMINA.maks, this.stamina + STAMINA.pulih * dt);
+    const sasaran = bergerak ? (mauLari ? ORANG.lari : ORANG.jalan) : 0;
     this.laju += (sasaran - this.laju) * Math.min(1, dt * 10);
 
     if (bergerak) {

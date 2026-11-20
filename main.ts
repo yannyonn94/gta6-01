@@ -1,4 +1,4 @@
-// [RONDE 3] Pelanggan make.fun: membangun dossier entry "Kota Karang" dan
+// [RONDE 4] Pelanggan make.fun: membangun dossier entry "Kota Karang" dan
 // menyalin screenshot ke folder output. Semua validasi gagal keras di sini.
 import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,7 +7,13 @@ const here = process.cwd();
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? 'out';
 mkdirSync(out, { recursive: true });
 
-// [RONDE 3] Cek keras bahan baku: screenshot 3-4 berkas, PNG/JPEG, <= 256 KiB.
+// [RONDE 4] Cek keras bahan baku: folder game/ dan index.html harus ada.
+const gameDir = join(here, 'game');
+if (!existsSync(join(gameDir, 'index.html'))) {
+  throw new Error('game/index.html tidak ada; jalankan dari root repo');
+}
+
+// [RONDE 4] Cek keras bahan baku: screenshot 3-4 berkas, PNG/JPEG, <= 256 KiB.
 const shotsDir = join(here, 'screenshots');
 let shotNames = [];
 try {
@@ -43,25 +49,29 @@ const cover = join(here, 'screenshots', '2-play.jpg');
 
 const dossier = {
   name: 'Kota Karang',
-  tagline: 'Kota pesisir terbuka: lima misi, polisi yang mengintai, dan hidupmu taruhannya.',
+  tagline: 'Kota pesisir terbuka: enam misi, motor, koin emas, polisi yang mengintai, dan hidupmu taruhannya.',
   cover,
   images: gambar,
   briefing:
-    'Kota Karang adalah kota pesisir yang longgar dijaga. Ambil mobil, selesaikan lima misi, dan ' +
-    'jangan biarkan polisi mengepungmu. Kamu bisa berjalan kaki, mencuri mobil, menembak, mengemudi ' +
-    'sepanjang pantai, dan mengisi bahan bakar di pom bensin.',
+    'Kota Karang adalah kota pesisir yang longgar dijaga. Ambil mobil atau motor, selesaikan enam misi, ' +
+    'kumpulkan koin emas, dan jangan biarkan polisi mengepungmu. Kamu bisa berjalan kaki, mencuri mobil, ' +
+    'menembak, mengemudi sepanjang pantai, mengisi bahan bakar di dua pom bensin, dan membunyikan klakson.',
   rules: [
     'Satu pemain, dunia terbuka yang bisa dijelajahi bebas.',
-    'Lima misi berurutan: curi mobil, kumpul kantong, hilangkan wanted, sprint pantai, parkir presisi.',
-    'Wanted naik saat mencuri mobil, menabrak, atau menembak polisi dan pejalan kaki; turun saat sembunyi.',
-    'Mobil punya bahan bakar; isi ulang di pom bensin di sudut barat-laut.',
+    'Enam misi berurutan: curi mobil, kumpul kantong, hilangkan wanted, sprint pantai, parkir presisi, koin Karang.',
+    'Wanted naik saat mencuri mobil, menabrak, atau menembak polisi dan pejalan kaki; turun saat sembunyi. Makin tinggi wanted, makin cepat dan akurat polisi mengejar.',
+    'Mobil dan motor punya bahan bakar; isi ulang di dua pom bensin (barat-laut dan tenggara).',
+    'Lari memakai stamina; habis berarti jalan biasa sampai pulih.',
     'Menabrak mobil lain mengurangi nyawa; nyawa habis berarti pelarian berakhir.',
+    'Skor berlipat lewat kombo: tiap 3 aksi beruntun menaikkan pengali (maks x4).',
   ],
   controls: [
     'WASD atau panah: bergerak / mengemudi',
-    'Shift: lari / ngebut',
+    'Shift: lari / ngebut (pakai stamina)',
     'Spasi: menembak (kaki) atau mengerem (dalam mobil)',
     'E: masuk atau keluar mobil',
+    'H: klakson',
+    'Roda mouse: zoom kamera',
     'Esc atau P: jeda',
     'Klik layar: kunci kursor untuk mengarahkan kamera',
   ],

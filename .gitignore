@@ -1,5 +1,13 @@
+# Build dan artefak lokal (jangan masuk repo).
 node_modules/
 out/
 .makefun/
 .hermes/
 *.log
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+dist/
+coverage/
+.vscode/

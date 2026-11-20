@@ -1,5 +1,5 @@
-// [RONDE 3] HUD: wanted, uang, skor, jam, speedometer, bahan bakar, objektif,
-// dan minimap yang menampilkan lalu lintas, pejalan kaki, dan polisi.
+// [RONDE 4] HUD: wanted, uang, skor, jam, speedometer, bahan bakar, objektif,
+// stamina, dan minimap yang menampilkan lalu lintas, pejalan kaki, dan polisi.
 import { KOTA } from './config.js';
 
 export class Hud {
@@ -16,6 +16,7 @@ export class Hud {
     this.elObjektif = document.getElementById('objektif');
     this.elPesan = document.getElementById('pesan');
     this.elNyawa = document.querySelector('#nyawa > div');
+    this.elStamina = document.querySelector('#stamina > div');
     this.kanvas = document.getElementById('minimap');
     this.ctx = this.kanvas.getContext('2d');
     this.timerPesan = 0;
@@ -33,11 +34,20 @@ export class Hud {
 
   aturUang(v) { this.elUang.textContent = `$${Math.round(v)}`; }
   aturNyawa(v) { this.elNyawa.style.width = `${Math.max(0, Math.min(100, v))}%`; }
+
+  /** Bar stamina: penuh hijau, menipis jadi kuning lalu merah. */
+  aturStamina(v) {
+    if (!this.elStamina) return;
+    const p = Math.max(0, Math.min(100, v));
+    this.elStamina.style.width = `${p}%`;
+    this.elStamina.style.background = p > 50 ? '#9fe3a0' : p > 20 ? '#f2c94c' : '#ff6b6b';
+  }
+
   aturObjektif(t) { this.elObjektif.textContent = t; }
 
   aturSkor(s) {
     this.elSkor.textContent = s.teks;
-    const label = s.teksKombo || s.teksStatus;
+    const label = s.teksKombo || s.teksPengali || s.teksStatus;
     this.elKombo.textContent = label;
     this.elKombo.style.opacity = label ? '1' : '0';
   }
@@ -58,9 +68,9 @@ export class Hud {
 
   aturMobil(nama) { this.elMobil.textContent = nama || ''; }
 
-  aturBahan(persen, kosong) {
-    this.elBahan.textContent = `BBM ${persen}`;
-    this.elBahan.style.color = kosong ? '#ff6b6b' : '#9fe3a0';
+  aturBahan(persen, kosong, rendah = false) {
+    this.elBahan.textContent = rendah ? `BBM ${persen} — RENDAH` : `BBM ${persen}`;
+    this.elBahan.style.color = kosong || rendah ? '#ff6b6b' : '#9fe3a0';
     this.elBahan.parentElement.style.opacity = '1';
   }
 

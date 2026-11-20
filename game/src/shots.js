@@ -1,4 +1,5 @@
-// [RONDE 3] Mode shot: membaca ?shot=...&seed=N&hour=H dan menata scene.
+// [RONDE 4] Mode shot: membaca ?shot=...&seed=N&hour=H dan menata scene.
+// Mode: start, play, chase, drive, koin, end.
 export function bacaQueryShot() {
   const q = new URLSearchParams(window.location.search);
   const hour = q.get('hour');
@@ -20,7 +21,10 @@ export function tataShot(nama, ctx) {
       aturJam(11);
       kamera.position.set(0, 150, 230);
       kamera.lookAt(0, 0, 0);
-      if (hud) hud.tampil(true);
+      if (hud) {
+        hud.tampil(true);
+        hud.aturJam(siklus ? siklus.teksJam() : '11:00', false);
+      }
       return 'start';
     case 'play': {
       aturJam(10);
@@ -40,7 +44,7 @@ export function tataShot(nama, ctx) {
       return 'play';
     }
     case 'chase': {
-      aturJam(18.5);
+      aturJam(16.0);
       const cx = 6, cz = -20;
       pemain.pos.set(cx, 0, cz);
       pemain.kelompok.position.copy(pemain.pos);
@@ -58,12 +62,12 @@ export function tataShot(nama, ctx) {
         hud.tampil(true);
         hud.aturWanted(3);
         hud.aturObjektif('Misi: Hilang Sejenak — Polisi sudah tahu. Turunkan bintang wanted kamu.');
-        hud.aturJam(siklus ? siklus.teksJam() : '18:30', false);
+        hud.aturJam(siklus ? siklus.teksJam() : '17:18', false);
       }
       return 'chase';
     }
     case 'drive': {
-      aturJam(18.2);
+      aturJam(16.5);
       const m = lalu[0];
       pemain.masukMobil(m);
       m.pengemudi = 'pemain';
@@ -76,12 +80,29 @@ export function tataShot(nama, ctx) {
       if (hud) {
         hud.tampil(true);
         hud.aturObjektif('Misi: Sprint Pantai — Tempuh 420 meter sebelum waktu habis.');
-        hud.aturJam(siklus ? siklus.teksJam() : '18:12', false);
+        hud.aturJam(siklus ? siklus.teksJam() : '17:18', false);
         hud.aturLaju(m.laju, true);
         hud.aturMobil(m.nama);
         hud.aturBahan(m.tangki.teks, false);
       }
       return 'drive';
+    }
+    case 'koin': {
+      aturJam(10.5);
+      pemain.pos.set(-140, 0, -132);
+      pemain.kelompok.position.copy(pemain.pos);
+      pemain.kelompok.rotation.y = Math.PI * 0.3;
+      pemain.laju = 5.2;
+      pemain.faseJalan = 0.8;
+      pemain.animasi();
+      kamera.position.set(-138, 3.2, -124);
+      kamera.lookAt(-142, 1.6, -142);
+      if (hud) {
+        hud.tampil(true);
+        hud.aturObjektif('Misi: Koin Karang — Kumpulkan 5 koin emas yang tersebar di kota. (0/5)');
+        hud.aturJam(siklus ? siklus.teksJam() : '10:30', false);
+      }
+      return 'koin';
     }
     case 'end':
       aturJam(22);

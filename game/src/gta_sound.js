@@ -1,4 +1,5 @@
-// [RONDE 3] Audio prosedural WebAudio: tembakan, sirene, mesin, blip, musik.
+// [RONDE 4] Audio prosedural WebAudio: tembakan, sirene, mesin, blip, musik,
+// klakson, koin, dan jingle misi.
 export class SuaraGTA {
   constructor() {
     this.ctx = null;
@@ -101,6 +102,28 @@ export class SuaraGTA {
       this.osLfo = null;
     }
     if (on) this.osSirene.frequency.setTargetAtTime(760, this.ctx.currentTime, 0.05);
+  }
+
+  /** Klakson dua nada (H): bunyi pendek 370 Hz lalu 440 Hz. */
+  klakson() {
+    if (!this.pastikan() || !this.nyalakan) return;
+    this.blip(370, 0.14, 'square', 0.22);
+    setTimeout(() => this.blip(440, 0.16, 'square', 0.22), 120);
+  }
+
+  /** Bunyi koin: dua blip naik (880 lalu 1320 Hz). */
+  koin() {
+    if (!this.pastikan() || !this.nyalakan) return;
+    this.blip(880, 0.09, 'sine', 0.25);
+    setTimeout(() => this.blip(1320, 0.14, 'sine', 0.25), 80);
+  }
+
+  /** Jingle misi selesai: arpeggio empat nada naik. */
+  jingle() {
+    if (!this.pastikan() || !this.nyalakan) return;
+    [523, 659, 784, 1047].forEach((f, i) => {
+      setTimeout(() => this.blip(f, 0.16, 'triangle', 0.25), i * 110);
+    });
   }
 
   musik(on) {

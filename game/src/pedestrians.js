@@ -1,11 +1,14 @@
-// [RONDE 3] Pejalan kaki: berjalan di trotoar, menyeberang, menghindar mobil,
-// dan panik saat wanted naik.
+// [RONDE 4] Pejalan kaki: berjalan di trotoar, menyeberang, menghindar mobil,
+// dan panik saat wanted naik. Tiga tipe pejalan: pejalan biasa, pelari (jogger),
+// dan pejalan santai yang lambat.
 import { PEJALAN } from './config.js';
 import { batas, acak } from './world_config.js';
 
 const T = window.THREE;
 const KULIT = [0xc98f6b, 0x8d5a3b, 0xe0b48f];
 const BAJU = [0x7f8c8d, 0xd35400, 0x16a085, 0x2c3e50, 0xf1c40f];
+// Laju dasar per tipe: biasa, pelari, santai.
+const LAJU_TIPE = { biasa: [0.8, 1.6], pelari: [2.0, 2.6], santai: [0.45, 0.7] };
 
 export class PejalanKaki {
   constructor(scene, x, z) {
@@ -27,7 +30,12 @@ export class PejalanKaki {
 
     this.pos = new T.Vector3(x, 0, z);
     this.heading = acak(0, Math.PI * 2);
-    this.laju = acak(0.8, 1.6);
+    // Tipe pejalan menentukan laju dasar dan seberapa sering menyeberang.
+    const r = Math.random();
+    this.tipe = r < 0.6 ? 'biasa' : r < 0.8 ? 'pelari' : 'santai';
+    const [lo, hi] = LAJU_TIPE[this.tipe];
+    this.laju = acak(lo, hi);
+    this.lajuDasar = [lo, hi];
     this.fase = acak(0, 6);
     this.panik = false;
     this.menyeberang = false;
@@ -63,8 +71,11 @@ export class PejalanKaki {
         this.heading = acak(0, Math.PI * 2);
       }
     } else {
-      this.laju = acak(0.8, 1.6);
-      if (Math.random() < PEJALAN.peluangCross * dt * 0.4) {
+      // Laju dasar mengikuti tipe pejalan; pelari jarang menyeberang.
+      const [lo, hi] = this.lajuDasar;
+      this.laju = acak(lo, hi);
+      const peluang = this.tipe === 'pelari' ? PEJALAN.peluangCross * 0.4 : PEJALAN.peluangCross;
+      if (Math.random() < peluang * dt * 0.4) {
         this.menyeberang = true;
         this.menunggu = acak(1.2, 2.4);
         this.heading += Math.PI / 2;

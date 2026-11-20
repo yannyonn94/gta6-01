@@ -1,6 +1,6 @@
-// [RONDE 3] Lima misi: curi mobil, kumpul kantong, hilangkan wanted, sprint,
-// dan parkir presisi. Setiap misi punya objektif dan penanda yang jelas.
-import { MISI } from './config.js';
+// [RONDE 4] Enam misi: curi mobil, kumpul kantong, hilangkan wanted, sprint,
+// parkir presisi, dan koin Karang. Setiap misi punya objektif dan penanda yang jelas.
+import { MISI, KOINS } from './config.js';
 
 export const DAFTAR_MISI = [
   {
@@ -32,6 +32,18 @@ export const DAFTAR_MISI = [
     id: 'm5', judul: 'Parkir Presisi',
     briefing: 'Parkir di garasi dalam 30 detik, mesin mati.',
     jenis: 'parkir', waktu: 30, target: { x: 60, z: 120 }, hadiah: MISI.hadiah[4],
+  },
+  {
+    id: 'm6', judul: 'Koin Karang',
+    briefing: 'Kumpulkan 5 koin emas yang tersebar di kota sebelum waktu habis.',
+    jenis: 'koin', jumlah: KOINS.jumlah, waktu: KOINS.waktu, hadiah: MISI.hadiah[5],
+    titik: [
+      { x: -140, z: -140, diambil: false },
+      { x: 150, z: -100, diambil: false },
+      { x: -60, z: 150, diambil: false },
+      { x: 100, z: 160, diambil: false },
+      { x: 0, z: 0, diambil: false },
+    ],
   },
 ];
 
@@ -84,6 +96,9 @@ export class MisiState {
     if (m.jenis === 'parkir') {
       const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
       return `${m.judul}: ${Math.round(d)} m, berhenti di zona (${Math.max(0, Math.ceil(this.sisa))} d)`;
+    }
+    if (m.jenis === 'koin') {
+      return `${m.judul}: ${this.terkumpul}/${m.jumlah} koin (${Math.max(0, Math.ceil(this.sisa))} d)`;
     }
     return m.judul;
   }

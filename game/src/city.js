@@ -1,4 +1,5 @@
-// [RONDE 3] Pembangun kota: tanah, jalan, blok gedung, lampu, dan pohon palem.
+// [RONDE 4] Pembangun kota: tanah, jalan, blok gedung, lampu, pohon palem,
+// pantai berpasir di selatan, dan dermaga kayu yang menjorok ke laut.
 import { KOTA, WARNA } from './config.js';
 import { acakSeed, acak } from './world_config.js';
 
@@ -128,5 +129,28 @@ export function bangunKota(scene, seed = 1) {
     pohon.push(g);
   }
 
-  return { bentang, setengah, jalan, gedung, pohon, lampu };
+  // Pantai berpasir di tepi selatan kota.
+  const pantai = new T.Mesh(
+    new T.PlaneGeometry(bentang, 26),
+    new T.MeshLambertMaterial({ color: 0xc2a878 }),
+  );
+  pantai.rotation.x = -Math.PI / 2;
+  pantai.position.set(0, 0.01, setengah - 2);
+  scene.add(pantai);
+
+  // Dermaga kayu di ujung selatan (target misi pertama).
+  const dermaga = new T.Group();
+  const papanMat = new T.MeshLambertMaterial({ color: 0x8a6a42 });
+  const papan = new T.Mesh(new T.BoxGeometry(10, 0.4, 46), papanMat);
+  papan.position.y = 1.2;
+  dermaga.add(papan);
+  for (const [ox, oz] of [[-4.5, -20], [4.5, -20], [-4.5, 0], [4.5, 0], [-4.5, 20], [4.5, 20]]) {
+    const tiang = new T.Mesh(new T.CylinderGeometry(0.35, 0.35, 2.4, 8), papanMat);
+    tiang.position.set(ox, 0.6, oz);
+    dermaga.add(tiang);
+  }
+  dermaga.position.set(0, 0, setengah + 14);
+  scene.add(dermaga);
+
+  return { bentang, setengah, jalan, gedung, pohon, lampu, pantai, dermaga };
 }

@@ -1,5 +1,6 @@
-// [RONDE 3] Polisi: cruiser yang memprediksi gerak pemain dan saling membagi
-// sisi saat mengejar, jadi kejar-kejaran terasa seperti dikepung.
+// [RONDE 4] Polisi: cruiser yang memprediksi gerak pemain dan saling membagi
+// sisi saat mengejar, jadi kejar-kejaran terasa seperti dikepung. Makin tinggi
+// wanted, makin cepat dan makin akurat prediksinya.
 import { MOBIL, POLISI } from './config.js';
 import { batas, selisihSudut } from './world_config.js';
 
@@ -44,13 +45,15 @@ export class MobilPolisi {
     this.sisi = indeks % 2 ? 1 : -1;
   }
 
-  kejar(dt, sasaran, aktif, kecepatanSasaran = null, rekan = []) {
+  kejar(dt, sasaran, aktif, kecepatanSasaran = null, rekan = [], wanted = 0) {
     if (!aktif) {
       this.laju *= 0.9;
       this.kelompok.position.copy(this.pos);
       return;
     }
-    const lead = POLISI.lead * (kecepatanSasaran ? Math.hypot(kecepatanSasaran.x, kecepatanSasaran.z) / MOBIL.top : 0);
+    // Prediksi makin tajam dan laju makin tinggi seiring wanted naik.
+    const agresi = 1 + Math.max(0, wanted) * POLISI.kejarAgresif;
+    const lead = POLISI.lead * agresi * (kecepatanSasaran ? Math.hypot(kecepatanSasaran.x, kecepatanSasaran.z) / MOBIL.top : 0);
     const bidikX = sasaran.x + (kecepatanSasaran ? kecepatanSasaran.x : 0) * lead;
     const bidikZ = sasaran.z + (kecepatanSasaran ? kecepatanSasaran.z : 0) * lead;
     const dx = bidikX - this.pos.x, dz = bidikZ - this.pos.z;
@@ -58,7 +61,7 @@ export class MobilPolisi {
     const ingin = Math.atan2(dx, dz);
     this.heading += batas(selisihSudut(this.heading, ingin), -2.9 * this.kepala * dt, 2.9 * this.kepala * dt);
 
-    const puncak = MOBIL.top * 1.25 * this.kepala;
+    const puncak = MOBIL.top * 1.25 * this.kepala * (0.92 + Math.max(0, wanted) * 0.05);
     const sasaranLaju = jarak > 8 ? puncak : puncak * 0.4;
     this.laju += (sasaranLaju - this.laju) * Math.min(1, dt * 1.4);
     this.pos.x += Math.sin(this.heading) * this.laju * dt;

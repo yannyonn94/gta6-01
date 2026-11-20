@@ -27,6 +27,8 @@
 
   #nyawa { width: 160px; height: 8px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; margin-top: 6px; }
   #nyawa > div { height: 100%; width: 100%; background: var(--hijau); transition: width .2s; }
+  #stamina { width: 160px; height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  #stamina > div { height: 100%; width: 100%; background: var(--hijau); transition: width .2s; }
 
   #objektif { position: absolute; top: 92px; left: 14px; max-width: 46ch; font-size: 13px; line-height: 1.35; color: #dbe3ee; }
 
@@ -72,6 +74,8 @@
     <div class="panel">
       <div>Nyawa</div>
       <div id="nyawa"><div></div></div>
+      <div style="margin-top:4px">Stamina</div>
+      <div id="stamina"><div></div></div>
     </div>
   </div>
   <div id="objektif" class="panel">Misi: —</div>
@@ -87,9 +91,9 @@
 <div id="overlay">
   <div class="kartu">
     <h1>KOTA KARANG</h1>
-    <h2>Kota pesisir terbuka. Misi, kejar-kejaran, dan hidupmu.</h2>
-    <p>WASD bergerak · Shift lari · Spasi tembak / rem · E masuk-keluar mobil · Esc jeda · klik layar untuk mengunci kursor.</p>
-    <p>Mode screenshot: <code>?shot=start|play|chase|drive|end</code> dengan <code>&amp;seed=</code> dan <code>&amp;hour=</code>.</p>
+    <h2>Kota pesisir terbuka. Enam misi, kejar-kejaran, koin emas, dan hidupmu.</h2>
+    <p>WASD bergerak · Shift lari (pakai stamina) · Spasi tembak / rem · E masuk-keluar mobil · H klakson · roda mouse zoom kamera · Esc jeda · klik layar untuk mengunci kursor.</p>
+    <p>Mode screenshot: <code>?shot=start|play|chase|drive|koin|end</code> dengan <code>&amp;seed=</code> dan <code>&amp;hour=</code>.</p>
     <button id="btn-start">Mulai baru</button>
     <button id="btn-continue" class="ghost">Lanjutkan</button>
   </div>

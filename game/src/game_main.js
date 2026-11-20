@@ -1,18 +1,18 @@
-// [RONDE 3] Inti permainan "Kota Karang": dunia, pemain, polisi, lalu lintas,
-// misi, bahan bakar, dan mode screenshot.
-import { KOTA, MOBIL, POLISI, SKOR, KUNCI_SIMPAN, MAX_FRAME } from './config.js';
+// [RONDE 4] Inti permainan "Kota Karang": dunia, pemain, polisi, lalu lintas,
+// misi, bahan bakar, koin, bintang dan bulan, dan mode screenshot.
+import { KOTA, MOBIL, MOTOR, POLISI, SKOR, KOINS, WARNA, KUNCI_SIMPAN, MAX_FRAME } from './config.js';
 import { batas, acak, jarak2 } from './world_config.js';
 import { bangunKota } from './city.js';
 import { Pemain } from './player.js';
-import { Mobil, buatLaluLintas } from './vehicles.js';
+import { Mobil, Motor, buatLaluLintas } from './vehicles.js';
 import { buatPolisi } from './police.js';
 import { buatPejalan } from './pedestrians.js';
-import { buatPomBensin } from './fuel.js';
+import { buatPomBensin, stasiunTerdekat } from './fuel.js';
 import { MisiState, DAFTAR_MISI } from './missions.js';
 import { Hud } from './hud.js';
-import { buatMasukan, AKSI_MOBIL, AKSI_TEMBAK, AKSI_JEDA } from './input.js';
+import { buatMasukan, AKSI_MOBIL, AKSI_TEMBAK, AKSI_JEDA, AKSI_KLAKSON } from './input.js';
 import { SuaraGTA } from './gta_sound.js';
-import { SiklusHari } from './daynight.js';
+import { SiklusHari, buatBintang, buatBulan } from './daynight.js';
 import { PapanSkor } from './score.js';
 import { bacaQueryShot, tataShot } from './shots.js';
 
@@ -53,6 +53,10 @@ const query = bacaQueryShot();
 const dunia = bangunKota(scene, query.seed);
 const setengahKota = dunia.setengah;
 
+// Bintang dan bulan untuk langit malam.
+const bintang = buatBintang(scene);
+const bulan = buatBulan(scene);
+
 const pemain = new Pemain(scene);
 pemain.pos.set(0, 0, 12);
 pemain.kelompok.position.copy(pemain.pos);
@@ -89,6 +93,7 @@ const state = {
   crashCd: 0,
   nearCd: 0,
   refillMsg: 0,
+  bbmRendahCd: 0,
   minimapCd: 0,
 };
 
@@ -112,6 +117,27 @@ scene.add(penanda);
 const peluru = [];
 const geoPeluru = new T.SphereGeometry(0.16, 6, 5);
 const matPeluru = new T.MeshBasicMaterial({ color: 0xffe08a });
+
+// Koin Karang: cakram emas berputar untuk misi keenam.
+const koinMeshes = [];
+const geoKoin = new T.CylinderGeometry(0.9, 0.9, 0.18, 20);
+const matKoin = new T.MeshLambertMaterial({ color: WARNA.koin, emissive: WARNA.koinPijar });
+const m6 = DAFTAR_MISI.find((m) => m.id === 'm6');
+for (const t of m6.titik) {
+  const k = new T.Mesh(geoKoin, matKoin);
+  k.position.set(t.x, 1.1, t.z);
+  k.rotation.x = Math.PI / 2;
+  k.visible = false;
+  scene.add(k);
+  koinMeshes.push(k);
+}
+
+function aturKoinTerlihat(terlihat) {
+  const m = misi.aktif;
+  koinMeshes.forEach((k, i) => {
+    k.visible = terlihat && m?.jenis === 'koin' && !m.titik[i].diambil;
+  });
+}
 
 function tambahWanted(n) {
   state.wanted = batas(state.wanted + n, 0, 5);
@@ -159,10 +185,11 @@ function dekatDenganMobilParkir() {
   return terbaik;
 }
 
-function kendalikanMobil(dt) {
+function kendalikanMobil(dt, aksi = 0) {
   const m = pemain.diMobil;
   const { x, y, lari, rem } = masukan.gerak();
-  const aksi = masukan.ambilAksi();
+
+  if (aksi & AKSI_KLAKSON) sound.klakson();
 
   if (aksi & AKSI_MOBIL) {
     if (pemain.diMobil) {
@@ -186,9 +213,12 @@ function kendalikanMobil(dt) {
   if (!pemain.diMobil) return;
 
   const kosong = m.tangki.kosong;
-  const puncak = kosong ? MOBIL.top * 0.4 : MOBIL.top;
+  // Motor memakai top speed dan akselerasi sendiri; mobil memakai MOBIL.
+  const topKendaraan = m.top ?? MOBIL.top;
+  const akselKendaraan = m.akselerasi ?? MOBIL.akselerasi;
+  const puncak = kosong ? topKendaraan * 0.4 : topKendaraan;
   if (y > 0) {
-    m.laju += (MOBIL.akselerasi + (lari ? 0.7 : 0)) * puncak * dt;
+    m.laju += (akselKendaraan + (lari ? 0.7 : 0)) * puncak * dt;
   } else if (y < 0 || rem) {
     m.laju -= (MOBIL.rem * 140 + 1.6) * dt * (rem ? 2.4 : 1);
   } else {
@@ -224,9 +254,17 @@ function kendalikanMobil(dt) {
     }
   }
 
-  sound.mesin(Math.abs(m.laju) / MOBIL.top);
-  hud.aturBahan(m.tangki.teks, kosong);
+  sound.mesin(Math.abs(m.laju) / topKendaraan);
+  hud.aturBahan(m.tangki.teks, kosong, m.tangki.rendah);
   if (kosong) hud.kilat('Bahan bakar habis! Mobil kehilangan tenaga.', 1.5);
+  else if (m.tangki.rendah) {
+    state.bbmRendahCd -= dt;
+    if (state.bbmRendahCd <= 0) {
+      state.bbmRendahCd = 4;
+      const { jarak } = stasiunTerdekat(m.pos.x, m.pos.z, pom);
+      hud.kilat(`Bahan bakar rendah — pom bensin terdekat ${Math.round(jarak)} m.`, 2.5);
+    }
+  }
 }
 
 // Menabrak mobil: nyawa berkurang; lewat dekat: skor nyaris.
@@ -351,6 +389,22 @@ function jalankanMisi(dt) {
       skor.tambah(SKOR.parkir, 'Parkir presisi');
       selesaiMisi();
     } else if (misi.sisa <= 0) gagalMisi('Waktu habis.');
+  } else if (misi.aktif.jenis === 'koin') {
+    misi.sisa -= dt;
+    for (let i = 0; i < misi.aktif.titik.length; i++) {
+      const t = misi.aktif.titik[i];
+      if (!t.diambil && jarak2(pos.x, pos.z, t.x, t.z) < KOINS.jariJemput) {
+        t.diambil = true;
+        misi.terkumpul += 1;
+        beriUang(KOINS.nilai);
+        skor.tambah(SKOR.koin, 'Koin Karang');
+        hud.kilat(`Koin Karang +$${KOINS.nilai} (${misi.terkumpul}/${misi.aktif.jumlah})`, 1.6);
+        sound.koin();
+        aturKoinTerlihat(true);
+      }
+    }
+    if (misi.terkumpul >= misi.aktif.jumlah) selesaiMisi();
+    else if (misi.sisa <= 0) gagalMisi('Waktu habis.');
   } else if (misi.aktif.jenis === 'curi') {
     if (pemain.diMobil === mobilCuri && jarak2(pos.x, pos.z, misi.aktif.target.x, misi.aktif.target.z) < 10) {
       selesaiMisi();
@@ -365,21 +419,27 @@ function selesaiMisi() {
   beriUang(m.hadiah);
   skor.tambah(SKOR.misi, m.judul);
   hud.kilat(`Misi selesai: ${m.judul} (+$${m.hadiah})`, 3.4);
-  sound.blip(740, 0.2, 'triangle', 0.3);
+  sound.jingle();
   misi.aktif = null;
+  aturKoinTerlihat(false);
   misi.indeks += 1;
   simpan();
   if (misi.indeks >= DAFTAR_MISI.length) {
     akhiri('Kamu menguasai Kota Karang.');
   } else {
     misi.mulai(DAFTAR_MISI[misi.indeks]);
+    const berikut = DAFTAR_MISI[misi.indeks];
+    hud.kilat(`Misi baru: ${berikut.judul} — ${berikut.briefing}`, 3.2);
+    aturKoinTerlihat(true);
   }
 }
 
 function gagalMisi(alasan) {
   hud.kilat(`Misi gagal: ${alasan}`, 3);
   misi.aktif = null;
+  aturKoinTerlihat(false);
   misi.mulai(DAFTAR_MISI[misi.indeks]);
+  aturKoinTerlihat(true);
 }
 
 function akhiri(pesan) {
@@ -411,7 +471,12 @@ function begin(lanjutkan) {
   sound.lanjut();
   sound.musik(true);
   if (lanjutkan) sound.sirene(state.wanted > 0);
-  if (!misi.aktif) misi.mulai(DAFTAR_MISI[misi.indeks]);
+  if (!misi.aktif) {
+    misi.mulai(DAFTAR_MISI[misi.indeks]);
+    const m0 = DAFTAR_MISI[misi.indeks];
+    hud.kilat(`Misi: ${m0.judul} — ${m0.briefing}`, 3.2);
+    aturKoinTerlihat(true);
+  }
 }
 
 function berhenti() {
@@ -433,7 +498,7 @@ let terakhir = performance.now();
 function loop(now) {
   const dt = Math.min((now - terakhir) / 1000, MAX_FRAME);
   terakhir = now;
-  const { yaw, pitch } = masukan.pandang();
+  const { yaw, pitch, zoom } = masukan.pandang();
 
   if (state.started && !state.paused) {
     const aksi = masukan.ambilAksi();
@@ -441,7 +506,7 @@ function loop(now) {
     if (aksi & AKSI_JEDA) berhenti();
 
     pemain.lentur(dt, masukan.gerak(), yaw, setengahKota);
-    kendalikanMobil(dt);
+    kendalikanMobil(dt, aksi);
     for (const m of lalu) {
       if (m.pengemudi === 'lalu') {
         m.gerak(dt);
@@ -468,13 +533,19 @@ function loop(now) {
       const kecepatanSasaran = pemain.diMobil
         ? { x: Math.sin(pemain.heading) * pemain.diMobil.laju, z: Math.cos(pemain.heading) * pemain.diMobil.laju }
         : { x: Math.sin(pemain.heading) * pemain.laju, z: Math.cos(pemain.heading) * pemain.laju };
-      p.kejar(dt, target, aktif && i < state.wanted, kecepatanSasaran, polisi);
+      p.kejar(dt, target, aktif && i < state.wanted, kecepatanSasaran, polisi, Math.round(state.wanted));
     });
 
     for (const ped of pejalan) ped.lentur(dt, pemain.pos, state.wanted > 0, pemain.diMobil ? [pemain.diMobil] : []);
     jalankanMisi(dt);
     skor.langkah(dt);
     hud.langkah(dt);
+    hud.aturStamina(pemain.stamina);
+
+    // Koin berputar selama misi koin aktif.
+    for (const k of koinMeshes) {
+      if (k.visible) k.rotation.y += dt * 2.4;
+    }
 
     if (aktif) {
       state.wanted = batas(state.wanted - dt / POLISI.decay, 0, 5);
@@ -507,17 +578,23 @@ function loop(now) {
     hud.aturLaju(pemain.diMobil ? pemain.diMobil.laju : pemain.laju, !!pemain.diMobil);
   }
 
-  siklus.terapkan(scene, matahari, ambient, dunia.lampu);
-  const target = pemain.diMobil
-    ? new T.Vector3(pemain.diMobil.pos.x, 1.1, pemain.diMobil.pos.z)
-    : new T.Vector3(pemain.pos.x, 1.5, pemain.pos.z);
-  const kameraOffset = new T.Vector3(
-    Math.sin(yaw) * Math.cos(pitch) * -6.5,
-    2.4 - pitch * 5,
-    Math.cos(yaw) * Math.cos(pitch) * -6.5,
-  );
-  camera.position.copy(target).add(kameraOffset);
-  camera.lookAt(target.x, target.y + 0.5, target.z);
+  siklus.terapkan(scene, matahari, ambient, dunia.lampu, bintang, bulan);
+  // Kamera ikuti-pemain hanya untuk permainan biasa (mode 'none'). Dalam mode
+  // shot, kamera pemandangan dari tataShot dipertahankan; kalau tidak, kamera
+  // 'chase'/'koin' yang menghadap polisi/koin langsung ditimpa kamera ikuti
+  // yang menghadap sebaliknya sehingga subjeknya hilang dari frame.
+  if (mode === 'none') {
+    const target = pemain.diMobil
+      ? new T.Vector3(pemain.diMobil.pos.x, 1.1, pemain.diMobil.pos.z)
+      : new T.Vector3(pemain.pos.x, 1.5, pemain.pos.z);
+    const kameraOffset = new T.Vector3(
+      Math.sin(yaw) * Math.cos(pitch) * -6.5 * zoom,
+      (2.4 - pitch * 5) * zoom,
+      Math.cos(yaw) * Math.cos(pitch) * -6.5 * zoom,
+    );
+    camera.position.copy(target).add(kameraOffset);
+    camera.lookAt(target.x, target.y + 0.5, target.z);
+  }
 
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
@@ -527,6 +604,11 @@ function loop(now) {
 const mode = tataShot(query.shot || '', {
   pemain, kamera: camera, lalu, polisi, pejalan, setengahKota, hud, overlay, siklus,
 });
+if (mode === 'koin') {
+  // Tampilkan koin untuk foto misi keenam (misi tidak aktif di mode shot).
+  misi.aktif = m6;
+  aturKoinTerlihat(true);
+}
 if (mode !== 'none') {
   state.started = false;
   // Biarkan animasi jalan di mode shot supaya gambar terlihat hidup.

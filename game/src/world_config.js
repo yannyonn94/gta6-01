@@ -1,10 +1,25 @@
-// [RONDE 3] Helper matematika kecil dan konstanta dunia.
+// [RONDE 4] Helper matematika kecil dan konstanta dunia.
 export function batas(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
 export function acak(a, b) {
   return a + Math.random() * (b - a);
+}
+
+/** Bilangan bulat acak inklusif di [a, b]. */
+export function acakInt(a, b) {
+  return a + Math.floor(Math.random() * (b - a + 1));
+}
+
+/** Sudut dari (ax, az) menuju (bx, bz), searah jarum jam dari +Z. */
+export function sudutKe(ax, az, bx, bz) {
+  return Math.atan2(bx - ax, bz - az);
+}
+
+/** Interpolasi linear a -> b sebesar t (0..1). */
+export function lerp(a, b, t) {
+  return a + (b - a) * batas(t, 0, 1);
 }
 
 /** Pengacak deterministik dari seed supaya kota sama untuk seed yang sama. */
