@@ -1,44 +1,34 @@
-// Skor dan kombo.
-// Skor diberi dari misi, kejar-kejaran, dan aksi kecil. Kombo naik tiap kali
-// pemain mendapat skor dalam jendela waktu, dan turun kalau pemain berhenti
-// bertindak terlalu lama — jadi HUD selalu punya angka yang bergerak.
-export class Score {
+// [RONDE 3] Papan skor: skor, kombo, dan jejak aksi terakhir untuk HUD.
+export class PapanSkor {
   constructor() {
-    this.value = 0;
-    this.combo = 0;
-    this.comboTimer = 0;
-    this.best = 0;
-    this.events = [];
+    this.nilai = 0;
+    this.kombo = 0;
+    this.sisaKombo = 0;
+    this.jejak = [];
   }
 
-  /** Tambah skor; label dipakai HUD untuk pesan singkat. */
-  add(points, label = '') {
-    if (points <= 0) return;
-    this.value += points;
-    this.combo += 1;
-    this.comboTimer = 4;
-    this.best = Math.max(this.best, this.value);
-    if (this.events.length > 4) this.events.shift();
-    this.events.push({ points, label, at: performance.now() });
+  tambah(poin, label = '') {
+    if (poin <= 0) return;
+    this.nilai += poin;
+    this.kombo += 1;
+    this.sisaKombo = 4;
+    if (this.jejak.length > 4) this.jejak.shift();
+    this.jejak.push({ poin, label, pada: performance.now() });
   }
 
-  update(dt) {
-    if (this.comboTimer > 0) {
-      this.comboTimer -= dt;
-      if (this.comboTimer <= 0) this.combo = 0;
+  langkah(dt) {
+    if (this.sisaKombo > 0) {
+      this.sisaKombo -= dt;
+      if (this.sisaKombo <= 0) this.kombo = 0;
     }
     const now = performance.now();
-    while (this.events.length && now - this.events[0].at > 2600) this.events.shift();
+    while (this.jejak.length && now - this.jejak[0].pada > 2600) this.jejak.shift();
   }
 
-  get text() { return String(Math.round(this.value)); }
-
-  get comboText() { return this.combo > 1 ? `x${this.combo}` : ''; }
-
-  /** Satu baris ringkas untuk HUD. */
-  statusText() {
-    const last = this.events[this.events.length - 1];
-    if (!last) return '';
-    return `+${last.points} ${last.label}`.trim();
+  get teks() { return String(Math.round(this.nilai)); }
+  get teksKombo() { return this.kombo > 1 ? `x${this.kombo}` : ''; }
+  get teksStatus() {
+    const a = this.jejak[this.jejak.length - 1];
+    return a ? `+${a.poin} ${a.label}`.trim() : '';
   }
 }

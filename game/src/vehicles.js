@@ -1,71 +1,77 @@
-// [REVISI thinking_revised] Vehicles: parked cars to steal, plus a traffic fleet that drives the roads.
-import { CAR_SPEED, clamp, rand } from './world_config.js';
+// [RONDE 3] Kendaraan: mobil parkir yang bisa dicuri dan armada lalu lintas.
+import { LALU } from './config.js';
+import { batas, acak } from './world_config.js';
+import { Tangki } from './fuel.js';
 
 const T = window.THREE;
-const COLORS = [0xc0392b, 0x2980b9, 0x27ae60, 0xf39c12, 0x8e44ad, 0xbdc3c7, 0x2c3e50];
+const WARNA = [0xc0392b, 0x2980b9, 0x27ae60, 0xf39c12, 0x8e44ad, 0xbdc3c7, 0x2c3e50];
 
-export class Car {
-  constructor(scene, color = 0xc0392b) {
-    this.group = new T.Group();
-    const bodyMat = new T.MeshLambertMaterial({ color });
-    const glassMat = new T.MeshLambertMaterial({ color: 0x1d2a35 });
-    const tyreMat = new T.MeshLambertMaterial({ color: 0x14161a });
+export class Mobil {
+  constructor(scene, warna = 0xc0392b) {
+    this.kelompok = new T.Group();
+    const bodiMat = new T.MeshLambertMaterial({ color: warna });
+    const kacaMat = new T.MeshLambertMaterial({ color: 0x1d2a35 });
+    const banMat = new T.MeshLambertMaterial({ color: 0x14161a });
 
-    const body = new T.Mesh(new T.BoxGeometry(1.9, 0.55, 4.2), bodyMat);
-    body.position.y = 0.55;
-    const cabin = new T.Mesh(new T.BoxGeometry(1.7, 0.5, 2.1), glassMat);
-    cabin.position.set(0, 1.05, -0.1);
-    this.group.add(body, cabin);
+    const bodi = new T.Mesh(new T.BoxGeometry(1.9, 0.55, 4.2), bodiMat);
+    bodi.position.y = 0.55;
+    const kabin = new T.Mesh(new T.BoxGeometry(1.7, 0.5, 2.1), kacaMat);
+    kabin.position.set(0, 1.05, -0.1);
+    this.kelompok.add(bodi, kabin);
 
-    const wheelGeo = new T.CylinderGeometry(0.36, 0.36, 0.3, 10);
-    this.wheels = [];
+    const geoRoda = new T.CylinderGeometry(0.36, 0.36, 0.3, 10);
+    this.roda = [];
     for (const [x, z] of [[-0.95, 1.35], [0.95, 1.35], [-0.95, -1.35], [0.95, -1.35]]) {
-      const w = new T.Mesh(wheelGeo, tyreMat);
-      w.rotation.z = Math.PI / 2;
-      w.position.set(x, 0.36, z);
-      this.group.add(w);
-      this.wheels.push(w);
+      const r = new T.Mesh(geoRoda, banMat);
+      r.rotation.z = Math.PI / 2;
+      r.position.set(x, 0.36, z);
+      this.kelompok.add(r);
+      this.roda.push(r);
     }
-    scene.add(this.group);
-    this.mesh = this.group;
+    scene.add(this.kelompok);
+
+    this.mesh = this.kelompok;
     this.pos = new T.Vector3();
     this.heading = 0;
-    this.speed = 0;
-    this.driver = null;      // 'player' | 'traffic' | null
-    this.color = color;
+    this.laju = 0;
+    this.pengemudi = null;   // 'lalu' | 'pemain' | null
+    this.nama = 'Mobil';
+    this.tangki = new Tangki();
   }
 
-  update(dt) {
-    if (this.driver === 'traffic') {
-      this.speed += (CAR_SPEED * 0.55 - this.speed) * Math.min(1, dt * 0.8);
-      this.pos.x += Math.sin(this.heading) * this.speed * dt;
-      this.pos.z += Math.cos(this.heading) * this.speed * dt;
-      this.group.position.copy(this.pos);
-      this.group.rotation.y = this.heading;
+  gerak(dt) {
+    if (this.pengemudi === 'lalu') {
+      this.laju += (LALU.laju - this.laju) * Math.min(1, dt * 0.8);
+      this.pos.x += Math.sin(this.heading) * this.laju * dt;
+      this.pos.z += Math.cos(this.heading) * this.laju * dt;
+      this.kelompok.position.copy(this.pos);
+      this.kelompok.rotation.y = this.heading;
+      this.tangki.pakai(this.laju * dt);
     }
-    for (const w of this.wheels) w.rotation.x += this.speed * dt * 2.2;
+    for (const r of this.roda) r.rotation.x += this.laju * dt * 2.2;
   }
 }
 
-/** A small fleet that loops around the grid on the roads. */
-export function spawnTraffic(scene, roads, count = 14) {
-  const fleet = [];
-  for (let i = 0; i < count; i++) {
-    const car = new Car(scene, COLORS[i % COLORS.length]);
-    const road = roads[i % roads.length];
-    const along = rand(-road.half, road.half);
-    const lane = (i % 2 ? 1 : -1) * 2.6;
-    if (road.vertical) {
-      car.pos.set(road.at + lane, 0, along);
-      car.heading = i % 4 < 2 ? 0 : Math.PI;
+/** Armada yang berputar-putar di jalan. */
+export function buatLaluLintas(scene, jalan, jumlah = LALU.jumlah) {
+  const armada = [];
+  for (let i = 0; i < jumlah; i++) {
+    const m = new Mobil(scene, WARNA[i % WARNA.length]);
+    m.nama = ['Sedan', 'Coupe', 'Station', 'Pickup'][i % 4];
+    const j = jalan[i % jalan.length];
+    const sepanjang = acak(-j.setengah, j.setengah);
+    const lajur = (i % 2 ? 1 : -1) * 2.6;
+    if (j.vertikal) {
+      m.pos.set(j.di + lajur, 0, sepanjang);
+      m.heading = i % 4 < 2 ? 0 : Math.PI;
     } else {
-      car.pos.set(along, 0, road.at + lane);
-      car.heading = i % 4 < 2 ? Math.PI / 2 : -Math.PI / 2;
+      m.pos.set(sepanjang, 0, j.di + lajur);
+      m.heading = i % 4 < 2 ? Math.PI / 2 : -Math.PI / 2;
     }
-    car.driver = 'traffic';
-    car.group.position.copy(car.pos);
-    car.group.rotation.y = car.heading;
-    fleet.push(car);
+    m.pengemudi = 'lalu';
+    m.kelompok.position.copy(m.pos);
+    m.kelompok.rotation.y = m.heading;
+    armada.push(m);
   }
-  return fleet;
+  return armada;
 }

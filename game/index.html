@@ -1,72 +1,109 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kota Karang — open world</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kota Karang</title>
+<link rel="icon" href="data:," />
 <style>
-  html, body { margin: 0; height: 100%; background: #0c0f14; overflow: hidden; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #eef1f5; }
-  #app { position: fixed; inset: 0; }
-  canvas { display: block; width: 100%; height: 100%; }
+  :root { --panel: rgba(9, 13, 18, 0.78); --aksen: #f2c94c; --hijau: #9fe3a0; --merah: #ff6b6b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b0f14; color: #e7ecf2;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  canvas#kanvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 
-  /* ---- HUD ---- */
-  #hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s; }
+  #hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s; z-index: 5; }
   #hud.on { opacity: 1; }
-  #wanted { position: absolute; top: 14px; right: 16px; font-size: 22px; letter-spacing: 4px; text-shadow: 0 2px 6px #000; }
-  #cash { position: absolute; top: 42px; right: 18px; font-size: 18px; color: #9fe3a0; text-shadow: 0 2px 6px #000; }
-  #score { position: absolute; top: 66px; right: 18px; font-size: 16px; color: #f2c94c; text-shadow: 0 2px 6px #000; }
-  #combo { position: absolute; top: 88px; right: 18px; font-size: 14px; color: #ff9d5c; text-shadow: 0 2px 6px #000; opacity: 0; transition: opacity .2s; }
-  #clock { position: absolute; top: 14px; right: 96px; font-size: 16px; color: #f2c94c; text-shadow: 0 2px 6px #000; }
-  #speedbox { position: absolute; right: 18px; bottom: 20px; text-align: right; transition: opacity .2s; }
-  #speed { font-size: 34px; font-weight: 700; text-shadow: 0 2px 8px #000; }
-  #speedbox small { font-size: 11px; letter-spacing: 2px; color: #aeb6c4; }
-  #carname { position: absolute; right: 18px; bottom: 66px; font-size: 12px; color: #c6ccd8; text-shadow: 0 2px 6px #000; }
-  #healthbar { position: absolute; left: 18px; bottom: 100px; width: 180px; height: 12px; background: rgba(58,32,32,.8); border: 1px solid #000; }
-  #healthbar > div { height: 100%; background: #e5534b; width: 100%; }
-  #objective { position: absolute; top: 14px; left: 16px; max-width: 380px; background: rgba(10,12,16,.55); padding: 8px 12px; border-left: 3px solid #f2c94c; font-size: 14px; line-height: 1.4; }
-  #msg { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); font-size: 20px; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity .3s; white-space: nowrap; }
-  #minimap { position: absolute; left: 16px; bottom: 16px; width: 160px; height: 160px; background: rgba(8,10,14,.6); border: 1px solid rgba(255,255,255,.25); }
+  .panel { background: var(--panel); border: 1px solid rgba(255,255,255,.08); border-radius: 10px;
+    padding: 8px 12px; backdrop-filter: blur(3px); }
 
-  /* ---- start / pause ---- */
-  #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(circle at 50% 35%, #1d2432, #07090d); z-index: 10; }
-  #overlay.hidden { display: none; }
-  #overlay h1 { margin: 0; font-size: 54px; letter-spacing: 3px; }
-  #overlay p { max-width: 600px; text-align: center; color: #c6ccd8; line-height: 1.5; margin: 0; }
-  #overlay button { pointer-events: auto; cursor: pointer; background: #f2c94c; color: #14161c; border: 0; padding: 12px 28px; font-size: 18px; font-weight: 700; border-radius: 6px; }
-  #overlay button + button { background: #2c3444; color: #eef1f5; }
-  kbd { background: #252b38; border: 1px solid #4a5266; border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+  #topbar { position: absolute; top: 14px; left: 14px; display: flex; gap: 10px; align-items: stretch; }
+  #wanted { font-size: 22px; letter-spacing: 2px; }
+  #jam { font-size: 18px; font-variant-numeric: tabular-nums; }
+
+  #statbar { position: absolute; top: 14px; right: 14px; display: flex; gap: 10px; align-items: stretch; }
+  #uang, #skor { font-size: 18px; font-weight: 600; }
+  #kombo { color: var(--aksen); font-size: 14px; opacity: 0; transition: opacity .2s; }
+
+  #nyawa { width: 160px; height: 8px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  #nyawa > div { height: 100%; width: 100%; background: var(--hijau); transition: width .2s; }
+
+  #objektif { position: absolute; top: 92px; left: 14px; max-width: 46ch; font-size: 13px; line-height: 1.35; color: #dbe3ee; }
+
+  #speedo { position: absolute; right: 14px; bottom: 18px; text-align: right; }
+  #laju { font-size: 42px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  #speedo small { font-size: 11px; opacity: .7; }
+  #mobil { font-size: 13px; color: #cfd7e3; }
+  #bahan { font-size: 12px; margin-top: 2px; }
+
+  #pesan { position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%);
+    font-size: 15px; color: #fff; opacity: 0; transition: opacity .2s; white-space: nowrap; }
+
+  #minimap { position: absolute; left: 14px; bottom: 18px; width: 168px; height: 168px;
+    border-radius: 50%; border: 2px solid rgba(255,255,255,.2); }
+
+  #overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 40%, rgba(20,28,40,.88), rgba(5,8,12,.96)); z-index: 10;
+    transition: opacity .25s; }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  .kartu { text-align: center; max-width: 620px; padding: 34px 40px; }
+  .kartu h1 { margin: 0 0 6px; font-size: 44px; letter-spacing: 1px; color: var(--aksen); }
+  .kartu h2 { margin: 0 0 18px; font-weight: 400; font-size: 15px; color: #aeb8c8; }
+  .kartu p { margin: 6px 0; font-size: 14px; color: #cfd7e3; }
+  .kartu button { margin: 8px 4px 0; padding: 12px 22px; font-size: 15px; border: 0; border-radius: 8px;
+    background: var(--aksen); color: #1a1a1a; font-weight: 700; cursor: pointer; }
+  .kartu button.ghost { background: rgba(255,255,255,.12); color: #e7ecf2; }
+  .kartu button:hover { filter: brightness(1.08); }
+  #endTitle { color: var(--aksen); }
 </style>
 </head>
 <body>
-<div id="app"></div>
+<canvas id="kanvas"></canvas>
 
 <div id="hud">
-  <div id="objective">Misi: —</div>
-  <div id="wanted">★</div>
-  <div id="cash">$0</div>
-  <div id="score">0</div>
-  <div id="combo"></div>
-  <div id="clock">08:30</div>
-  <div id="carname"></div>
-  <div id="speedbox"><div id="speed">0</div><small>KM/J</small></div>
-  <div id="msg"></div>
-  <div id="healthbar"><div></div></div>
-  <canvas id="minimap" width="160" height="160"></canvas>
+  <div id="topbar">
+    <div class="panel"><span id="wanted">☆☆☆☆☆</span> <span id="jam">08:30</span></div>
+  </div>
+  <div id="statbar">
+    <div class="panel">
+      <div><span id="uang">$0</span> &nbsp; <span id="skor">0</span></div>
+      <div id="kombo"></div>
+    </div>
+    <div class="panel">
+      <div>Nyawa</div>
+      <div id="nyawa"><div></div></div>
+    </div>
+  </div>
+  <div id="objektif" class="panel">Misi: —</div>
+  <div id="speedo" class="panel">
+    <div><span id="laju">0</span> <small>km/j</small></div>
+    <div id="mobil"></div>
+    <div id="bahan">BBM 100%</div>
+  </div>
+  <div id="pesan" class="panel"></div>
+  <canvas id="minimap" width="168" height="168"></canvas>
 </div>
 
 <div id="overlay">
-  <h1>KOTA KARANG</h1>
-  <p>Kota pantai orisinal dengan siang-malam. Jalan kaki, curi mobil, kabur dari polisi, menangkan misi dan sprint.</p>
-  <button id="btn-start">Mulai baru</button>
-  <button id="btn-continue">Lanjutkan progres</button>
-  <p style="font-size:13px">
-    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> jalan &nbsp; <kbd>Shift</kbd> lari &nbsp;
-    <kbd>E</kbd> masuk/keluar mobil &nbsp; <kbd>Spasi</kbd> rem / tembak &nbsp; <kbd>Mouse</kbd> lihat &nbsp;
-    <kbd>Esc</kbd> jeda
-  </p>
+  <div class="kartu">
+    <h1>KOTA KARANG</h1>
+    <h2>Kota pesisir terbuka. Misi, kejar-kejaran, dan hidupmu.</h2>
+    <p>WASD bergerak · Shift lari · Spasi tembak / rem · E masuk-keluar mobil · Esc jeda · klik layar untuk mengunci kursor.</p>
+    <p>Mode screenshot: <code>?shot=start|play|chase|drive|end</code> dengan <code>&amp;seed=</code> dan <code>&amp;hour=</code>.</p>
+    <button id="btn-start">Mulai baru</button>
+    <button id="btn-continue" class="ghost">Lanjutkan</button>
+  </div>
 </div>
 
-<script src="/vendor/three.min.js"></script>
-<script type="module" src="/src/game_main.js"></script>
+<div id="end">
+  <div class="kartu">
+    <h1 id="endTitle">Selesai</h1>
+    <p id="endText"></p>
+    <button id="btn-again">Main lagi</button>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script type="module" src="src/game_main.js"></script>
 </body>
 </html>

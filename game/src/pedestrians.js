@@ -1,100 +1,98 @@
-// [RONDE 2] Pejalan kaki: berjalan di trotoar, menyeberang jalan di persimpangan,
-// menghindar mobil yang melintas, dan panik bila ada wanted.
-import { PEDS } from './config.js';
-import { clamp, rand } from './world_config.js';
+// [RONDE 3] Pejalan kaki: berjalan di trotoar, menyeberang, menghindar mobil,
+// dan panik saat wanted naik.
+import { PEJALAN } from './config.js';
+import { batas, acak } from './world_config.js';
 
 const T = window.THREE;
-const SKIN = [0xc98f6b, 0x8d5a3b, 0xe0b48f];
-const SHIRT = [0x7f8c8d, 0xd35400, 0x16a085, 0x2c3e50, 0xf1c40f];
+const KULIT = [0xc98f6b, 0x8d5a3b, 0xe0b48f];
+const BAJU = [0x7f8c8d, 0xd35400, 0x16a085, 0x2c3e50, 0xf1c40f];
 
-export class Pedestrian {
+export class PejalanKaki {
   constructor(scene, x, z) {
-    this.group = new T.Group();
-    const skin = new T.MeshLambertMaterial({ color: SKIN[Math.floor(rand(0, SKIN.length))] });
-    const shirt = new T.MeshLambertMaterial({ color: SHIRT[Math.floor(rand(0, SHIRT.length))] });
-    const torso = new T.Mesh(new T.BoxGeometry(0.42, 0.6, 0.26), shirt);
-    torso.position.y = 1.0;
-    const head = new T.Mesh(new T.SphereGeometry(0.18, 8, 6), skin);
-    head.position.y = 1.5;
-    const legL = new T.Mesh(new T.BoxGeometry(0.16, 0.6, 0.18),
+    this.kelompok = new T.Group();
+    const kulit = new T.MeshLambertMaterial({ color: KULIT[Math.floor(acak(0, KULIT.length))] });
+    const baju = new T.MeshLambertMaterial({ color: BAJU[Math.floor(acak(0, BAJU.length))] });
+    const badan = new T.Mesh(new T.BoxGeometry(0.42, 0.6, 0.26), baju);
+    badan.position.y = 1.0;
+    const kepala = new T.Mesh(new T.SphereGeometry(0.18, 8, 6), kulit);
+    kepala.position.y = 1.5;
+    const kakiL = new T.Mesh(new T.BoxGeometry(0.16, 0.6, 0.18),
       new T.MeshLambertMaterial({ color: 0x22262c }));
-    legL.position.set(-0.1, 0.3, 0);
-    const legR = legL.clone();
-    legR.position.x = 0.1;
-    this.group.add(torso, head, legL, legR);
-    this.parts = { legL, legR };
-    scene.add(this.group);
+    kakiL.position.set(-0.1, 0.3, 0);
+    const kakiR = kakiL.clone();
+    kakiR.position.x = 0.1;
+    this.kelompok.add(badan, kepala, kakiL, kakiR);
+    this.bagian = { kakiL, kakiR };
+    scene.add(this.kelompok);
+
     this.pos = new T.Vector3(x, 0, z);
-    this.heading = rand(0, Math.PI * 2);
-    this.speed = rand(0.8, 1.6);
-    this.phase = rand(0, 6);
-    this.fleeing = false;
-    this.crossing = false;
-    this.waiting = rand(0, 2);
-    this.blocked = false;
+    this.heading = acak(0, Math.PI * 2);
+    this.laju = acak(0.8, 1.6);
+    this.fase = acak(0, 6);
+    this.panik = false;
+    this.menyeberang = false;
+    this.menunggu = acak(0, 2);
+    this.terhalang = false;
   }
 
-  /** cek mobil terdekat; pejalan kaki menunggu di tepi bila ada yang lewat. */
-  update(dt, playerPos, panic, cars = []) {
-    if (panic) this.fleeing = true;
+  lentur(dt, pemain, adaPanik, mobil = []) {
+    if (adaPanik) this.panik = true;
 
-    // menghindari mobil yang mendekat di depan
-    this.blocked = false;
-    for (const c of cars) {
-      const dx = this.pos.x - c.pos.x, dz = this.pos.z - c.pos.z;
-      const d = Math.hypot(dx, dz);
-      if (d < 7) {
-        const ahead = Math.sin(c.heading) * dx + Math.cos(c.heading) * dz;
-        if (ahead > 0 && Math.abs(d) < 7) { this.blocked = true; break; }
+    this.terhalang = false;
+    for (const m of mobil) {
+      const dx = this.pos.x - m.pos.x, dz = this.pos.z - m.pos.z;
+      if (Math.hypot(dx, dz) < 7) {
+        const depan = Math.sin(m.heading) * dx + Math.cos(m.heading) * dz;
+        if (depan > 0) { this.terhalang = true; break; }
       }
     }
 
-    if (this.fleeing) {
-      const dx = this.pos.x - playerPos.x, dz = this.pos.z - playerPos.z;
+    if (this.panik) {
+      const dx = this.pos.x - pemain.x, dz = this.pos.z - pemain.z;
       const d = Math.hypot(dx, dz) || 1;
       this.heading = Math.atan2(dx / d, dz / d);
-      this.speed = PEDS.panicSpeed;
-      this.crossing = false;
-    } else if (this.blocked) {
-      this.speed = 0;
-    } else if (this.crossing) {
-      this.speed = 2.4;
-      this.waiting -= dt;
-      if (this.waiting <= 0) {
-        this.crossing = false;
-        this.heading = rand(0, Math.PI * 2);
+      this.laju = PEJALAN.lariPanik;
+      this.menyeberang = false;
+    } else if (this.terhalang) {
+      this.laju = 0;
+    } else if (this.menyeberang) {
+      this.laju = 2.4;
+      this.menunggu -= dt;
+      if (this.menunggu <= 0) {
+        this.menyeberang = false;
+        this.heading = acak(0, Math.PI * 2);
       }
     } else {
-      this.speed = rand(0.8, 1.6);
-      if (Math.random() < PEDS.crossChance * dt * 0.4) {
-        this.crossing = true;
-        this.waiting = rand(1.2, 2.4);
-        // menyeberang: tegak lurus terhadap arah sebelumnya
+      this.laju = acak(0.8, 1.6);
+      if (Math.random() < PEJALAN.peluangCross * dt * 0.4) {
+        this.menyeberang = true;
+        this.menunggu = acak(1.2, 2.4);
         this.heading += Math.PI / 2;
       }
     }
 
-    this.pos.x = clamp(this.pos.x + Math.sin(this.heading) * this.speed * dt, -220, 220);
-    this.pos.z = clamp(this.pos.z + Math.cos(this.heading) * this.speed * dt, -220, 220);
-    this.phase += this.speed * dt * 2;
-    this.group.position.copy(this.pos);
-    this.group.rotation.y = this.heading;
-    const s = Math.sin(this.phase);
-    this.parts.legL.rotation.x = s * 0.6;
-    this.parts.legR.rotation.x = -s * 0.6;
+    this.pos.x = batas(this.pos.x + Math.sin(this.heading) * this.laju * dt, -220, 220);
+    this.pos.z = batas(this.pos.z + Math.cos(this.heading) * this.laju * dt, -220, 220);
+    this.fase += this.laju * dt * 2;
+    this.kelompok.position.copy(this.pos);
+    this.kelompok.rotation.y = this.heading;
+    const s = Math.sin(this.fase);
+    this.bagian.kakiL.rotation.x = s * 0.6;
+    this.bagian.kakiR.rotation.x = -s * 0.6;
   }
 }
 
-/** Sebar pejalan kaki di trotoar di sepanjang jalan. */
-export function spawnPedestrians(scene, half, count = 22) {
-  const list = [];
-  for (let i = 0; i < count; i++) {
-    const onVertical = Math.random() < 0.5;
-    const roadAt = -half + Math.floor(rand(0, 10)) * 44 + 6;
-    const along = rand(-half, half);
-    const lane = (Math.random() < 0.5 ? -1 : 1) * (6 + rand(0, 3));
-    const p = new Pedestrian(scene, onVertical ? roadAt + lane : along, onVertical ? along : roadAt + lane);
-    list.push(p);
+/** Sebar pejalan kaki di sepanjang trotoar. */
+export function buatPejalan(scene, setengah, jumlah = PEJALAN.jumlah) {
+  const daftar = [];
+  for (let i = 0; i < jumlah; i++) {
+    const vertikal = Math.random() < 0.5;
+    const diJalan = -setengah + Math.floor(acak(0, 10)) * 44 + 6;
+    const sepanjang = acak(-setengah, setengah);
+    const lajur = (Math.random() < 0.5 ? -1 : 1) * (6 + acak(0, 3));
+    const x = vertikal ? diJalan + lajur : sepanjang;
+    const z = vertikal ? sepanjang : diJalan + lajur;
+    daftar.push(new PejalanKaki(scene, x, z));
   }
-  return list;
+  return daftar;
 }

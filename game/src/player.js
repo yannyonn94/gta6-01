@@ -1,101 +1,88 @@
-// [REVISI thinking_revised] The player: a small body that walks and runs on foot, and can enter a car.
-import { PLAYER_HEIGHT, WALK_SPEED, RUN_SPEED, clamp } from './world_config.js';
+// [RONDE 3] Pemain: tubuh kecil yang berjalan/lari dan bisa masuk mobil.
+import { ORANG } from './config.js';
+import { batas } from './world_config.js';
 
 const T = window.THREE;
 
-export class Player {
+export class Pemain {
   constructor(scene) {
-    this.group = new T.Group();
-    const skin = new T.MeshLambertMaterial({ color: 0xc98f6b });
-    const shirt = new T.MeshLambertMaterial({ color: 0x2e6f8e });
-    const pants = new T.MeshLambertMaterial({ color: 0x2a2d34 });
+    this.kelompok = new T.Group();
+    const kulit = new T.MeshLambertMaterial({ color: 0xc98f6b });
+    const baju = new T.MeshLambertMaterial({ color: 0x2e6f8e });
+    const celana = new T.MeshLambertMaterial({ color: 0x2a2d34 });
 
-    const torso = new T.Mesh(new T.BoxGeometry(0.55, 0.75, 0.3), shirt);
-    torso.position.y = 1.15;
-    const head = new T.Mesh(new T.SphereGeometry(0.22, 10, 8), skin);
-    head.position.y = 1.72;
-    const legL = new T.Mesh(new T.BoxGeometry(0.2, 0.75, 0.22), pants);
-    legL.position.set(-0.14, 0.38, 0);
-    const legR = legL.clone();
-    legR.position.x = 0.14;
-    const armL = new T.Mesh(new T.BoxGeometry(0.16, 0.6, 0.18), skin);
-    armL.position.set(-0.36, 1.15, 0);
-    const armR = armL.clone();
-    armR.position.x = 0.36;
-
-    this.group.add(torso, head, legL, legR, armL, armR);
-    this.parts = { torso, head, legL, legR, armL, armR };
-    scene.add(this.group);
+    const badan = new T.Mesh(new T.BoxGeometry(0.55, 0.75, 0.3), baju);
+    badan.position.y = 1.15;
+    const kepala = new T.Mesh(new T.SphereGeometry(0.22, 10, 8), kulit);
+    kepala.position.y = 1.72;
+    const kakiL = new T.Mesh(new T.BoxGeometry(0.2, 0.75, 0.22), celana);
+    kakiL.position.set(-0.14, 0.38, 0);
+    const kakiR = kakiL.clone();
+    kakiR.position.x = 0.14;
+    const tanganL = new T.Mesh(new T.BoxGeometry(0.16, 0.6, 0.18), kulit);
+    tanganL.position.set(-0.36, 1.15, 0);
+    const tanganR = tanganL.clone();
+    tanganR.position.x = 0.36;
+    this.kelompok.add(badan, kepala, kakiL, kakiR, tanganL, tanganR);
+    this.bagian = { badan, kepala, kakiL, kakiR, tanganL, tanganR };
+    scene.add(this.kelompok);
 
     this.pos = new T.Vector3(0, 0, 0);
-    this.heading = 0;          // radians, 0 = +Z
-    this.speed = 0;
-    this.inCar = null;
-    this.health = 100;
-    this.walkPhase = 0;
+    this.heading = 0;
+    this.laju = 0;
+    this.diMobil = null;
+    this.nyawa = ORANG.nyawa;
+    this.faseJalan = 0;
   }
 
-  /** move on foot from the input's axes, relative to the camera yaw */
-  update(dt, move, camYaw, bounds) {
-    if (this.inCar) return;
-    let mx = move.x, mz = move.y;
-    const moving = mx !== 0 || mz !== 0;
-    const target = moving ? (move.run ? RUN_SPEED : WALK_SPEED) : 0;
-    this.speed += (target - this.speed) * Math.min(1, dt * 10);
+  lentur(dt, aksi, yawKamera, batasDunia) {
+    if (this.diMobil) return;
+    let mx = aksi.x, mz = aksi.y;
+    const bergerak = mx !== 0 || mz !== 0;
+    const sasaran = bergerak ? (aksi.lari ? ORANG.lari : ORANG.jalan) : 0;
+    this.laju += (sasaran - this.laju) * Math.min(1, dt * 10);
 
-    if (moving) {
-      const len = Math.hypot(mx, mz);
+    if (bergerak) {
+      const len = Math.hypot(mx, mz) || 1;
       mx /= len; mz /= len;
-      const cos = Math.cos(camYaw), sin = Math.sin(camYaw);
+      const cos = Math.cos(yawKamera), sin = Math.sin(yawKamera);
       const wx = mx * cos - mz * sin;
       const wz = mx * sin + mz * cos;
-      this.pos.x = clamp(this.pos.x + wx * this.speed * dt, -bounds, bounds);
-      this.pos.z = clamp(this.pos.z + wz * this.speed * dt, -bounds, bounds);
+      this.pos.x = batas(this.pos.x + wx * this.laju * dt, -batasDunia, batasDunia);
+      this.pos.z = batas(this.pos.z + wz * this.laju * dt, -batasDunia, batasDunia);
       this.heading = Math.atan2(wx, wz);
-      this.walkPhase += this.speed * dt * 1.6;
+      this.faseJalan += this.laju * dt * 1.6;
     } else {
-      this.walkPhase *= 0.9;
+      this.faseJalan *= 0.9;
     }
 
-    this.group.position.copy(this.pos);
-    this.group.rotation.y = this.heading;
-    this.animate();
+    this.kelompok.position.copy(this.pos);
+    this.kelompok.rotation.y = this.heading;
+    this.animasi();
   }
 
-  animate() {
-    const s = Math.sin(this.walkPhase);
-    const amp = Math.min(1, this.speed / WALK_SPEED);
-    this.parts.legL.rotation.x = s * 0.7 * amp;
-    this.parts.legR.rotation.x = -s * 0.7 * amp;
-    this.parts.armL.rotation.x = -s * 0.5 * amp;
-    this.parts.armR.rotation.x = s * 0.5 * amp;
-    this.parts.torso.position.y = 1.15 + Math.abs(Math.cos(this.walkPhase)) * 0.03 * amp;
+  animasi() {
+    const s = Math.sin(this.faseJalan);
+    const amp = Math.min(1, this.laju / ORANG.jalan);
+    this.bagian.kakiL.rotation.x = s * 0.7 * amp;
+    this.bagian.kakiR.rotation.x = -s * 0.7 * amp;
+    this.bagian.tanganL.rotation.x = -s * 0.5 * amp;
+    this.bagian.tanganR.rotation.x = s * 0.5 * amp;
+    this.bagian.badan.position.y = 1.15 + Math.abs(Math.cos(this.faseJalan)) * 0.03 * amp;
   }
 
-  enterCar(car) {
-    this.inCar = car;
-    this.group.visible = false;
-    this.speed = 0;
+  masukMobil(m) {
+    this.diMobil = m;
+    this.kelompok.visible = false;
+    this.laju = 0;
   }
 
-  exitCar() {
-    if (!this.inCar) return;
-    const car = this.inCar;
-    this.inCar = null;
-    this.group.visible = true;
-    this.pos.set(car.mesh.position.x + 1.6, 0, car.mesh.position.z);
-    this.group.position.copy(this.pos);
-  }
-
-  /** World position to aim at: the chest, or the car's cabin when driving. */
-  aimPoint() {
-    if (this.inCar) {
-      const p = this.inCar.mesh.position.clone();
-      p.y = 1.2;
-      return p;
-    }
-    const p = this.pos.clone();
-    p.y = 1.3;
-    return p;
+  keluarMobil() {
+    if (!this.diMobil) return;
+    const m = this.diMobil;
+    this.diMobil = null;
+    this.kelompok.visible = true;
+    this.pos.set(m.mesh.position.x + 1.6, 0, m.mesh.position.z);
+    this.kelompok.position.copy(this.pos);
   }
 }

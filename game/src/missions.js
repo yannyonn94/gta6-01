@@ -1,101 +1,90 @@
-// [RONDE 2] Empat misi: curi mobil, kumpul kantong, hilangkan wanted, dan sprint
-// jarak jauh sebelum waktu habis. Setiap misi punya objektif, penanda, hadiah.
-import { MISSION } from './config.js';
+// [RONDE 3] Lima misi: curi mobil, kumpul kantong, hilangkan wanted, sprint,
+// dan parkir presisi. Setiap misi punya objektif dan penanda yang jelas.
+import { MISI } from './config.js';
 
-export const MISSIONS = [
+export const DAFTAR_MISI = [
   {
-    id: 'm1',
-    title: 'Kereta Mati',
+    id: 'm1', judul: 'Kereta Mati',
     briefing: 'Ambil mobil biru di garasi dan bawa ke dermaga.',
-    kind: 'steal',
-    carColor: 0x2980b9,
-    reward: MISSION.rewards[0],
-    target: { x: 0, z: -190 },
-    start: { x: 60, z: 80 },
+    jenis: 'curi', target: { x: 0, z: -190 }, hadiah: MISI.hadiah[0],
   },
   {
-    id: 'm2',
-    title: 'Kantong Pasir',
+    id: 'm2', judul: 'Kantong Pasir',
     briefing: 'Kumpulkan 3 kantong di blok pasar sebelum polisi tiba.',
-    kind: 'collect',
-    reward: MISSION.rewards[1],
-    count: 3,
-    spots: [
-      { x: 120, z: 40, taken: false },
-      { x: -90, z: 110, taken: false },
-      { x: 30, z: -60, taken: false },
+    jenis: 'kumpul', jumlah: 3, hadiah: MISI.hadiah[1],
+    titik: [
+      { x: 120, z: 40, diambil: false },
+      { x: -90, z: 110, diambil: false },
+      { x: 30, z: -60, diambil: false },
     ],
   },
   {
-    id: 'm3',
-    title: 'Hilang Sejenak',
+    id: 'm3', judul: 'Hilang Sejenak',
     briefing: 'Polisi sudah tahu. Turunkan bintang wanted kamu.',
-    kind: 'evade',
-    reward: MISSION.rewards[2],
-    time: 45,
+    jenis: 'hindar', waktu: 45, hadiah: MISI.hadiah[2],
   },
   {
-    id: 'm4',
-    title: 'Sprint Pantai',
-    briefing: 'Tempuh 420 meter sebelum waktu habis, kejar-kejaran boleh.',
-    kind: 'race',
-    reward: MISSION.rewards[3],
-    time: 40,
-    distance: MISSION.raceDistance,
-    start: { x: 6, z: 40 },
+    id: 'm4', judul: 'Sprint Pantai',
+    briefing: 'Tempuh 420 meter sebelum waktu habis.',
+    jenis: 'sprint', waktu: 40, jarak: MISI.jarakSprint, hadiah: MISI.hadiah[3],
+  },
+  {
+    id: 'm5', judul: 'Parkir Presisi',
+    briefing: 'Parkir di garasi dalam 30 detik, mesin mati.',
+    jenis: 'parkir', waktu: 30, target: { x: 60, z: 120 }, hadiah: MISI.hadiah[4],
   },
 ];
 
-export class MissionState {
+export class MisiState {
   constructor() {
-    this.index = 0;
-    this.active = null;
-    this.collected = 0;
-    this.timer = 0;
-    this.distance = 0;
-    this.lastPos = null;
+    this.indeks = 0;
+    this.aktif = null;
+    this.terkumpul = 0;
+    this.sisa = 0;
+    this.jarak = 0;
+    this.posAkhir = null;
   }
 
-  start(mission) {
-    for (const spot of mission.spots ?? []) spot.taken = false;
-    this.active = mission;
-    this.collected = 0;
-    this.timer = mission.time ?? 0;
-    this.distance = 0;
-    this.lastPos = null;
+  mulai(m) {
+    for (const t of m.titik ?? []) t.diambil = false;
+    this.aktif = m;
+    this.terkumpul = 0;
+    this.sisa = m.waktu ?? 0;
+    this.jarak = 0;
+    this.posAkhir = null;
   }
 
-  next() {
-    this.index = Math.min(this.index + 1, MISSIONS.length - 1);
-    return MISSIONS[this.index];
+  lanjut() {
+    this.indeks = Math.min(this.indeks + 1, DAFTAR_MISI.length - 1);
+    return DAFTAR_MISI[this.indeks];
   }
 
-  /** Tambah jarak tempuh untuk misi sprint; dipanggil tiap frame. */
-  addDistance(pos) {
-    if (this.active?.kind !== 'race') return;
-    if (this.lastPos) {
-      this.distance += Math.hypot(pos.x - this.lastPos.x, pos.z - this.lastPos.z);
-    }
-    this.lastPos = { x: pos.x, z: pos.z };
+  tambahJarak(pos) {
+    if (this.aktif?.jenis !== 'sprint') return;
+    if (this.posAkhir) this.jarak += Math.hypot(pos.x - this.posAkhir.x, pos.z - this.posAkhir.z);
+    this.posAkhir = { x: pos.x, z: pos.z };
   }
 
-  objectiveText(playerPos, wanted) {
-    if (!this.active) return 'Misi: —';
-    const m = this.active;
-    if (m.kind === 'go' || m.kind === 'steal') {
-      const d = Math.hypot(playerPos.x - m.target.x, playerPos.z - m.target.z);
-      return `${m.title}: ${m.briefing} (${Math.round(d)} m)`;
+  teksObjektif(pos, wanted) {
+    const m = this.aktif;
+    if (!m) return 'Misi: —';
+    if (m.jenis === 'curi') {
+      const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
+      return `${m.judul}: ${m.briefing} (${Math.round(d)} m)`;
     }
-    if (m.kind === 'collect') {
-      return `${m.title}: ${this.collected}/${m.count} kantong (${Math.max(0, Math.ceil(this.timer))} d)`;
+    if (m.jenis === 'kumpul') {
+      return `${m.judul}: ${this.terkumpul}/${m.jumlah} kantong (${Math.max(0, Math.ceil(this.sisa))} d)`;
     }
-    if (m.kind === 'evade') {
-      return `${m.title}: turunkan wanted (${wanted > 0 ? `${wanted}★` : 'bersih'})`;
+    if (m.jenis === 'hindar') {
+      return `${m.judul}: turunkan wanted (${wanted > 0 ? `${wanted}★` : 'bersih'})`;
     }
-    if (m.kind === 'race') {
-      const left = Math.max(0, m.distance - this.distance);
-      return `${m.title}: ${Math.round(this.distance)}/${m.distance} m (${Math.max(0, Math.ceil(this.timer))} d)`;
+    if (m.jenis === 'sprint') {
+      return `${m.judul}: ${Math.round(this.jarak)}/${m.jarak} m (${Math.max(0, Math.ceil(this.sisa))} d)`;
     }
-    return m.title;
+    if (m.jenis === 'parkir') {
+      const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
+      return `${m.judul}: ${Math.round(d)} m, berhenti di zona (${Math.max(0, Math.ceil(this.sisa))} d)`;
+    }
+    return m.judul;
   }
 }

@@ -1,6 +1,6 @@
 [
-  { "name": "1-start.jpg", "query": "?shot=start&seed=1" },
-  { "name": "2-play.jpg", "query": "?shot=play&seed=1" },
-  { "name": "3-chase.jpg", "query": "?shot=chase&seed=1" },
-  { "name": "4-drive.jpg", "query": "?shot=drive&seed=1" }
+  { "name": "1-start.jpg", "caption": "Kartu judul Kota Karang dengan kota siang di belakangnya." },
+  { "name": "2-play.jpg", "caption": "Berjalan kaki di jalan utama, misi Kereta Mati berjalan." },
+  { "name": "3-chase.jpg", "caption": "Tiga cruiser mengejar di senja, lampu berkedip." },
+  { "name": "4-drive.jpg", "caption": "Mengemudi sepanjang pantai saat lampu kota menyala." }
 ]

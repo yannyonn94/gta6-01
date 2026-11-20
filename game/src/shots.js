@@ -1,94 +1,96 @@
-// Mode shot: membaca ?shot=...&seed=N dan menata scene yang jelas, termasuk
-// jam dalam sehari, supaya screenshot adalah render asli kode game.
-export function readShotQuery() {
+// [RONDE 3] Mode shot: membaca ?shot=...&seed=N&hour=H dan menata scene.
+export function bacaQueryShot() {
   const q = new URLSearchParams(window.location.search);
+  const hour = q.get('hour');
   return {
     shot: q.get('shot') ?? '',
     seed: Number(q.get('seed') ?? '1') || 1,
-    hour: q.get('hour') === null ? null : Number(q.get('hour')),
+    hour: hour === null ? null : Number(hour),
   };
 }
 
-/** Tata scene yang diminta. Mengembalikan deskripsi singkat untuk konsol. */
-export function stageShot(name, ctx) {
-  const { player, camera, traffic, police, pedestrians, cityHalf, hud, overlay, daynight } = ctx;
-  // Mode shot saja yang menyembunyikan kartu judul; free play harus menampilkannya.
-  if (overlay && name) overlay.classList.add('hidden');
+export function tataShot(nama, ctx) {
+  const { pemain, kamera, lalu, polisi, pejalan, setengahKota, hud, overlay, siklus } = ctx;
+  if (overlay && nama) overlay.classList.add('hidden');
 
-  const setHour = (h) => { if (daynight) daynight.setHour(h); };
+  const aturJam = (h) => { if (siklus) siklus.aturJam(h); };
 
-  switch (name) {
+  switch (nama) {
     case 'start':
-      // Pemandangan tinggi siang hari: jalan, blok, dan pantai.
-      setHour(11);
-      camera.position.set(0, 150, 230);
-      camera.lookAt(0, 0, 0);
-      if (hud) hud.show(true);
+      aturJam(11);
+      kamera.position.set(0, 150, 230);
+      kamera.lookAt(0, 0, 0);
+      if (hud) hud.tampil(true);
       return 'start';
     case 'play': {
-      // Over-the-shoulder di tengah jalan, ada mobil dan pejalan kaki.
-      setHour(10);
-      player.pos.set(6, 0, 40);
-      player.group.position.copy(player.pos);
-      player.group.rotation.y = Math.PI * 0.15;
-      player.speed = 5.2;
-      player.walkPhase = 1.2;
-      player.animate();
-      camera.position.set(7.6, 2.8, 34.2);
-      camera.lookAt(6.4, 1.6, 46);
-      if (hud) hud.show(true);
-      if (hud) hud.setObjective('Misi: Kereta Mati — Ambil mobil biru di garasi dan bawa ke dermaga. (42 m)');
-      if (hud) hud.setClock(daynight ? daynight.clockText() : '10:00', false);
+      aturJam(10);
+      pemain.pos.set(6, 0, 40);
+      pemain.kelompok.position.copy(pemain.pos);
+      pemain.kelompok.rotation.y = Math.PI * 0.15;
+      pemain.laju = 5.2;
+      pemain.faseJalan = 1.2;
+      pemain.animasi();
+      kamera.position.set(7.6, 2.8, 34.2);
+      kamera.lookAt(6.4, 1.6, 46);
+      if (hud) {
+        hud.tampil(true);
+        hud.aturObjektif('Misi: Kereta Mati — Ambil mobil biru di garasi dan bawa ke dermaga. (42 m)');
+        hud.aturJam(siklus ? siklus.teksJam() : '10:00', false);
+      }
       return 'play';
     }
     case 'chase': {
-      // Wanted 3 bintang, cruiser mengejar di jalan, senja.
-      setHour(18.5);
+      aturJam(18.5);
       const cx = 6, cz = -20;
-      player.pos.set(cx, 0, cz);
-      player.group.position.copy(player.pos);
-      player.group.rotation.y = Math.PI;
-      police.forEach((p, i) => {
-        p.group.visible = true;
+      pemain.pos.set(cx, 0, cz);
+      pemain.kelompok.position.copy(pemain.pos);
+      pemain.kelompok.rotation.y = Math.PI;
+      polisi.forEach((p, i) => {
+        p.kelompok.visible = true;
         p.pos.set(cx + (i - 2) * 3.4, 0, cz - 9 - i * 5);
-        p.group.position.copy(p.pos);
+        p.kelompok.position.copy(p.pos);
         p.heading = Math.PI;
-        p.speed = 8;
+        p.laju = 8;
       });
-      camera.position.set(cx + 1.8, 3.0, cz + 7.5);
-      camera.lookAt(cx, 1.4, cz - 12);
-      if (hud) hud.show(true);
-      if (hud) hud.setWanted(3);
-      if (hud) hud.setObjective('Misi: Hilang Sejenak — Polisi sudah tahu. Turunkan bintang wanted kamu.');
-      if (hud) hud.setClock(daynight ? daynight.clockText() : '18:30', false);
+      kamera.position.set(cx + 1.8, 3.0, cz + 7.5);
+      kamera.lookAt(cx, 1.4, cz - 12);
+      if (hud) {
+        hud.tampil(true);
+        hud.aturWanted(3);
+        hud.aturObjektif('Misi: Hilang Sejenak — Polisi sudah tahu. Turunkan bintang wanted kamu.');
+        hud.aturJam(siklus ? siklus.teksJam() : '18:30', false);
+      }
       return 'chase';
     }
     case 'drive': {
-      // Kamera kejar di belakang mobil, senja.
-      setHour(18.2);
-      const car = traffic[0];
-      player.enterCar(car);
-      car.driver = 'player';
-      car.pos.set(6, 0, -60);
-      car.heading = 0;
-      car.speed = 12;
-      car.group.position.copy(car.pos);
-      camera.position.set(6, 4.0, -68);
-      camera.lookAt(6, 0.9, -50);
-      if (hud) hud.show(true);
-      if (hud) hud.setObjective('Misi: Sprint Pantai — Tempuh 420 meter sebelum waktu habis.');
-      if (hud) hud.setClock(daynight ? daynight.clockText() : '18:12', false);
-      if (hud) hud.setSpeed(car.speed, true);
-      if (hud) hud.setCar('Sedan Kota');
+      aturJam(18.2);
+      const m = lalu[0];
+      pemain.masukMobil(m);
+      m.pengemudi = 'pemain';
+      m.pos.set(6, 0, -60);
+      m.heading = 0;
+      m.laju = 12;
+      m.kelompok.position.copy(m.pos);
+      kamera.position.set(6, 4.0, -68);
+      kamera.lookAt(6, 0.9, -50);
+      if (hud) {
+        hud.tampil(true);
+        hud.aturObjektif('Misi: Sprint Pantai — Tempuh 420 meter sebelum waktu habis.');
+        hud.aturJam(siklus ? siklus.teksJam() : '18:12', false);
+        hud.aturLaju(m.laju, true);
+        hud.aturMobil(m.nama);
+        hud.aturBahan(m.tangki.teks, false);
+      }
       return 'drive';
     }
     case 'end':
-      // Malam hari di atas kota: lampu menyala.
-      setHour(22);
-      camera.position.set(-40, 90, 260);
-      camera.lookAt(0, 10, 0);
-      if (hud) hud.show(true);
-      if (hud) hud.setClock(daynight ? daynight.clockText() : '22:00', true);
+      aturJam(22);
+      kamera.position.set(-40, 90, 260);
+      kamera.lookAt(0, 10, 0);
+      if (hud) {
+        hud.tampil(true);
+        hud.aturJam(siklus ? siklus.teksJam() : '22:00', true);
+      }
       return 'end';
     default:
       return 'none';

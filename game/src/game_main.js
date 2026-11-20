@@ -1,451 +1,556 @@
-// [RONDE 2] Kota Karang — game open-world orisinal untuk make.fun gta6-01.
-// Entry point: membangun kota, menjalankan loop, input, HUD (jam/skor/speedometer),
-// misi, wanted, siklus siang-malam, peluru, serta scene ?shot= untuk screenshot.
-import { buildCity } from './city.js';
-import { Player } from './player.js';
-import { Car, spawnTraffic } from './vehicles.js';
-import { spawnPedestrians } from './pedestrians.js';
-import { spawnPolice } from './police.js';
-import { MissionState, MISSIONS } from './missions.js';
+// [RONDE 3] Inti permainan "Kota Karang": dunia, pemain, polisi, lalu lintas,
+// misi, bahan bakar, dan mode screenshot.
+import { KOTA, MOBIL, POLISI, SKOR, KUNCI_SIMPAN, MAX_FRAME } from './config.js';
+import { batas, acak, jarak2 } from './world_config.js';
+import { bangunKota } from './city.js';
+import { Pemain } from './player.js';
+import { Mobil, buatLaluLintas } from './vehicles.js';
+import { buatPolisi } from './police.js';
+import { buatPejalan } from './pedestrians.js';
+import { buatPomBensin } from './fuel.js';
+import { MisiState, DAFTAR_MISI } from './missions.js';
 import { Hud } from './hud.js';
-import { createInput, ACTION_CAR, ACTION_FIRE, ACTION_PAUSE } from './input.js';
-import { GtaSound } from './gta_sound.js';
-import { DayNight } from './daynight.js';
-import { Score } from './score.js';
-import { readShotQuery, stageShot } from './shots.js';
-import { CAR, TRAFFIC, PEDS, POLICE, MISSION, SCORE, DAY, SAVE_KEY } from './config.js';
-import { clamp } from './world_config.js';
+import { buatMasukan, AKSI_MOBIL, AKSI_TEMBAK, AKSI_JEDA } from './input.js';
+import { SuaraGTA } from './gta_sound.js';
+import { SiklusHari } from './daynight.js';
+import { PapanSkor } from './score.js';
+import { bacaQueryShot, tataShot } from './shots.js';
 
 const T = window.THREE;
-const shot = readShotQuery();
 
-// ---------- renderer / scene ----------
-const app = document.getElementById('app');
-const renderer = new T.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+// ---------- renderer ----------
+const kanvas = document.getElementById('kanvas');
+const renderer = new T.WebGLRenderer({ canvas: kanvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-app.appendChild(renderer.domElement);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = T.PCFSoftShadowMap;
 
 const scene = new T.Scene();
 scene.background = new T.Color(0x87b5d9);
-scene.fog = new T.Fog(0x87b5d9, 120, 420);
+scene.fog = new T.Fog(0x87b5d9, 140, 520);
 
-const camera = new T.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 900);
+const camera = new T.PerspectiveCamera(64, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.set(0, 150, 230);
 
-const hemi = new T.HemisphereLight(0xbfdcff, 0x3a4a3a, 0.85);
-scene.add(hemi);
-const sun = new T.DirectionalLight(0xfff2d0, 0.9);
-sun.position.set(-120, 180, 90);
-scene.add(sun);
+const matahari = new T.DirectionalLight(0xfff2d0, 0.9);
+matahari.position.set(120, 200, 80);
+matahari.castShadow = true;
+matahari.shadow.mapSize.set(2048, 2048);
+matahari.shadow.camera.near = 1;
+matahari.shadow.camera.far = 700;
+matahari.shadow.camera.left = -260;
+matahari.shadow.camera.right = 260;
+matahari.shadow.camera.top = 260;
+matahari.shadow.camera.bottom = -260;
+scene.add(matahari);
 
-// ---------- siklus siang-malam & skor ----------
-const daynight = new DayNight();
-if (shot.hour !== null) daynight.setHour(shot.hour);
-const score = new Score();
+const ambient = new T.HemisphereLight(0xbfdcff, 0x3a4a3a, 0.8);
+scene.add(ambient);
 
-// ---------- world ----------
-const city = buildCity(scene, shot.seed);
-const half = city.half;
-const bounds = half - 4;
+// ---------- dunia ----------
+const query = bacaQueryShot();
+const dunia = bangunKota(scene, query.seed);
+const setengahKota = dunia.setengah;
 
-const player = new Player(scene);
-const traffic = spawnTraffic(scene, city.roads, TRAFFIC.count);
-const peds = spawnPedestrians(scene, half, PEDS.count);
-const police = spawnPolice(scene, POLICE.count);
+const pemain = new Pemain(scene);
+pemain.pos.set(0, 0, 12);
+pemain.kelompok.position.copy(pemain.pos);
 
-const CAR_NAMES = ['Sedan Kota', 'Coupe Biru', 'Station Hijau', 'Pickup Kuning'];
-const parked = [];
-const PARK_COLORS = [0xc0392b, 0x2980b9, 0x27ae60, 0xf39c12];
-for (let i = 0; i < 8; i++) {
-  const c = new Car(scene, PARK_COLORS[i % 4]);
-  c.name = CAR_NAMES[i % CAR_NAMES.length];
-  const along = -half + 20 + i * 110;
-  c.pos.set((i % 2 ? -1 : 1) * (6 + (i % 3)), 0, along);
-  c.heading = i % 2 ? Math.PI / 2 : -Math.PI / 2;
-  c.group.position.copy(c.pos);
-  c.group.rotation.y = c.heading;
-  parked.push(c);
-}
+const lalu = buatLaluLintas(scene, dunia.jalan, 14);
+const polisi = buatPolisi(scene, POLISI.jumlah);
+const pejalan = buatPejalan(scene, setengahKota, 22);
+const pom = buatPomBensin(scene, T, setengahKota);
 
-// ---------- systems ----------
+// Mobil curian di garasi misi.
+const mobilCuri = new Mobil(scene, 0x2980b9);
+mobilCuri.nama = 'Sedan Biru';
+mobilCuri.pos.set(0, 0, -190);
+mobilCuri.heading = Math.PI / 2;
+mobilCuri.kelompok.position.copy(mobilCuri.pos);
+mobilCuri.kelompok.rotation.y = mobilCuri.heading;
+lalu.push(mobilCuri);
+
+// ---------- sistem ----------
 const hud = new Hud();
-const input = createInput(renderer.domElement);
-const sound = new GtaSound();
-const missions = new MissionState();
+const masukan = buatMasukan(kanvas);
+const sound = new SuaraGTA();
+const siklus = new SiklusHari();
+const skor = new PapanSkor();
+const misi = new MisiState();
 
 const state = {
-  cash: 0,
-  wanted: 0,
-  wantedTimer: 0,
   started: false,
+  wanted: 0,
+  uang: 0,
+  senjata: 0,
+  misiIndex: 0,
   paused: false,
-  over: false,
-  currentCar: null,
-  saveTimer: 0,
+  crashCd: 0,
+  nearCd: 0,
+  refillMsg: 0,
+  minimapCd: 0,
 };
 
-function save() {
+const overlay = document.getElementById('overlay');
+const btnMulai = document.getElementById('btn-start');
+const btnLanjut = document.getElementById('btn-continue');
+const layarAkhir = document.getElementById('end');
+const btnMainLagi = document.getElementById('btn-again');
+const teksAkhir = document.getElementById('endText');
+const teksAkhirJudul = document.getElementById('endTitle');
+
+// Penanda misi di dunia.
+const penanda = new T.Mesh(
+  new T.CylinderGeometry(1.6, 1.6, 0.5, 16),
+  new T.MeshBasicMaterial({ color: 0xf2c94c }),
+);
+penanda.position.set(0, 0.3, -190);
+scene.add(penanda);
+
+// Peluru: bola cahaya yang benar-benar bergerak.
+const peluru = [];
+const geoPeluru = new T.SphereGeometry(0.16, 6, 5);
+const matPeluru = new T.MeshBasicMaterial({ color: 0xffe08a });
+
+function tambahWanted(n) {
+  state.wanted = batas(state.wanted + n, 0, 5);
+  hud.aturWanted(state.wanted);
+  if (state.wanted > 0) sound.sirene(true);
+}
+
+function beriUang(n) {
+  state.uang += n;
+  hud.aturUang(state.uang);
+}
+
+function simpan() {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({
-      cash: state.cash,
+    localStorage.setItem(KUNCI_SIMPAN, JSON.stringify({
       wanted: state.wanted,
-      score: score.value,
-      pos: { x: player.pos.x, z: player.pos.z },
-      missionIndex: missions.index,
-      hour: daynight.hour,
+      uang: state.uang,
+      misiIndex: misi.indeks,
     }));
   } catch {}
 }
 
-function load() {
+function muat() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(KUNCI_SIMPAN);
     if (!raw) return false;
     const d = JSON.parse(raw);
-    state.cash = d.cash ?? 0;
     state.wanted = d.wanted ?? 0;
-    score.value = d.score ?? 0;
-    player.pos.set(d.pos?.x ?? 0, 0, d.pos?.z ?? 0);
-    missions.index = d.missionIndex ?? 0;
-    if (typeof d.hour === 'number') daynight.setHour(d.hour);
+    state.uang = d.uang ?? 0;
+    misi.indeks = d.misiIndex ?? 0;
     return true;
   } catch {
     return false;
   }
 }
 
-const overlay = document.getElementById('overlay');
-const btnStart = document.getElementById('btn-start');
-const btnContinue = document.getElementById('btn-continue');
-if (localStorage.getItem(SAVE_KEY)) btnContinue.style.display = '';
-
-function startMission(m) {
-  missions.start(m);
-  hud.flash(`Misi: ${m.title} — ${m.briefing}`, 3.5);
-  sound.blip(880, 0.12, 'square', 0.25);
-}
-
-function begin(fresh) {
-  if (fresh && !state.started) {
-    state.cash = 0;
-    state.wanted = 0;
-    score.value = 0;
-    missions.index = 0;
-    missions.active = null;
-    try { localStorage.removeItem(SAVE_KEY); } catch {}
-  } else if (!fresh) {
-    load();
+// ---------- interaksi mobil ----------
+function dekatDenganMobilParkir() {
+  let terbaik = null, jarakTerbaik = MOBIL.jarakCuri;
+  for (const m of lalu) {
+    if (m.pengemudi === 'pemain') continue;
+    const d = jarak2(m.pos.x, m.pos.z, pemain.pos.x, pemain.pos.z);
+    if (d < jarakTerbaik) { jarakTerbaik = d; terbaik = m; }
   }
-  state.started = true;
-  state.paused = false;
-  overlay.classList.add('hidden');
-  hud.show(true);
-  hud.setCash(state.cash);
-  hud.setWanted(state.wanted);
-  hud.setScore(score);
-  hud.setHealth(player.health);
-  sound.resume();
-  sound.music(true);
-  if (!missions.active) startMission(MISSIONS[missions.index]);
+  return terbaik;
 }
 
-btnStart.addEventListener('click', () => begin(true));
-btnContinue.addEventListener('click', () => begin(false));
+function kendalikanMobil(dt) {
+  const m = pemain.diMobil;
+  const { x, y, lari, rem } = masukan.gerak();
+  const aksi = masukan.ambilAksi();
 
-// ---------- peluru ----------
-const bullets = [];
-const BULLET_SPEED = 42;
-function fireBullet() {
-  const dir = new T.Vector3();
-  camera.getWorldDirection(dir);
-  const mesh = new T.Mesh(
-    new T.BoxGeometry(0.06, 0.06, 1.4),
-    new T.MeshBasicMaterial({ color: 0xffe08a }),
-  );
-  const origin = player.inCar ? player.inCar.mesh.position.clone() : player.pos.clone();
-  origin.y += 1.3;
-  mesh.position.copy(origin).addScaledVector(dir, 1.2);
-  mesh.lookAt(origin.clone().addScaledVector(dir, 10));
+  if (aksi & AKSI_MOBIL) {
+    if (pemain.diMobil) {
+      pemain.keluarMobil();
+      m.pengemudi = null;
+      m.laju = 0;
+      hud.aturMobil('');
+    } else {
+      const target = dekatDenganMobilParkir();
+      if (target) {
+        pemain.masukMobil(target);
+        target.pengemudi = 'pemain';
+        tambahWanted(MOBIL.wantedCuri);
+        hud.kilat(`Kamu mengambil ${target.nama}.`, 2);
+        hud.aturMobil(target.nama);
+        sound.blip(320, 0.12, 'triangle', 0.25);
+      }
+    }
+  }
+
+  if (!pemain.diMobil) return;
+
+  const kosong = m.tangki.kosong;
+  const puncak = kosong ? MOBIL.top * 0.4 : MOBIL.top;
+  if (y > 0) {
+    m.laju += (MOBIL.akselerasi + (lari ? 0.7 : 0)) * puncak * dt;
+  } else if (y < 0 || rem) {
+    m.laju -= (MOBIL.rem * 140 + 1.6) * dt * (rem ? 2.4 : 1);
+  } else {
+    m.laju *= 1 - Math.min(1, dt * 0.55);
+  }
+  m.laju = batas(m.laju, -puncak * 0.5, puncak);
+
+  if (Math.abs(m.laju) > 0.3) {
+    m.heading += -x * MOBIL.belok * dt * (m.laju >= 0 ? 1 : -1);
+  }
+
+  const jarakTempuh = m.laju * dt;
+  m.pos.x = batas(m.pos.x + Math.sin(m.heading) * jarakTempuh, -setengahKota, setengahKota);
+  m.pos.z = batas(m.pos.z + Math.cos(m.heading) * jarakTempuh, -setengahKota, setengahKota);
+  m.kelompok.position.copy(m.pos);
+  m.kelompok.rotation.y = m.heading;
+  for (const r of m.roda) r.rotation.x += m.laju * dt * 2.2;
+
+  m.tangki.pakai(Math.abs(jarakTempuh));
+  pemain.pos.set(m.pos.x, 0, m.pos.z);
+  pemain.heading = m.heading;
+
+  // Isi ulang di pom bensin saat berhenti.
+  for (const p of pom) {
+    if (jarak2(m.pos.x, m.pos.z, p.x, p.z) < p.radius && Math.abs(m.laju) < 0.6) {
+      m.tangki.isiUlang(dt);
+      state.refillMsg -= dt;
+      if (state.refillMsg <= 0) {
+        state.refillMsg = 1.2;
+        hud.kilat(`Isi bahan bakar… ${m.tangki.teks}`, 1.0);
+        sound.blip(520, 0.08, 'sine', 0.2);
+      }
+    }
+  }
+
+  sound.mesin(Math.abs(m.laju) / MOBIL.top);
+  hud.aturBahan(m.tangki.teks, kosong);
+  if (kosong) hud.kilat('Bahan bakar habis! Mobil kehilangan tenaga.', 1.5);
+}
+
+// Menabrak mobil: nyawa berkurang; lewat dekat: skor nyaris.
+function interaksiLalu(dt) {
+  const m = pemain.diMobil;
+  state.crashCd -= dt;
+  state.nearCd -= dt;
+  if (!m) return;
+  const laju = Math.abs(m.laju);
+  for (const t of lalu) {
+    if (t === m) continue;
+    const d = jarak2(t.pos.x, t.pos.z, m.pos.x, m.pos.z);
+    if (d < 2.7 && laju > 4 && state.crashCd <= 0) {
+      state.crashCd = 0.8;
+      pemain.nyawa = Math.max(0, pemain.nyawa - 8);
+      hud.aturNyawa(pemain.nyawa);
+      hud.kilat('Tabrakan! Nyawa -8', 1.4);
+      m.laju *= 0.4;
+      sound.blip(180, 0.18, 'sawtooth', 0.3);
+      tambahWanted(0.2);
+    } else if (d < 5.6 && laju > 10 && state.nearCd <= 0) {
+      state.nearCd = 1.2;
+      skor.tambah(SKOR.nyaris, 'Nyaris tabrak');
+    }
+  }
+}
+
+// ---------- tembak ----------
+function tembak() {
+  if (!state.started || state.paused) return;
+  const asal = pemain.diMobil
+    ? new T.Vector3(pemain.diMobil.pos.x, 1.2, pemain.diMobil.pos.z)
+    : new T.Vector3(pemain.pos.x, 1.2, pemain.pos.z);
+  const { yaw, pitch } = masukan.pandang();
+  let arah;
+  if (pemain.diMobil) {
+    arah = new T.Vector3(Math.sin(pemain.heading), 0, Math.cos(pemain.heading));
+  } else {
+    arah = new T.Vector3(
+      Math.sin(yaw) * Math.cos(pitch),
+      Math.sin(pitch),
+      Math.cos(yaw) * Math.cos(pitch),
+    );
+  }
+  const mesh = new T.Mesh(geoPeluru, matPeluru);
+  mesh.position.copy(asal);
+  mesh.userData = { vx: arah.x * 90, vy: arah.y * 90, vz: arah.z * 90, sisa: 1.6 };
   scene.add(mesh);
-  bullets.push({ mesh, dir, life: 1.2 });
-  sound.shot();
-  addWanted(0.4);
+  peluru.push(mesh);
+  sound.tembak();
 }
 
-function updateBullets(dt) {
-  for (let i = bullets.length - 1; i >= 0; i--) {
-    const b = bullets[i];
-    b.mesh.position.addScaledVector(b.dir, BULLET_SPEED * dt);
-    b.life -= dt;
-    let hit = false;
+function langkahPeluru(dt) {
+  for (let i = peluru.length - 1; i >= 0; i--) {
+    const p = peluru[i];
+    p.position.x += p.userData.vx * dt;
+    p.position.y += p.userData.vy * dt;
+    p.position.z += p.userData.vz * dt;
+    p.userData.sisa -= dt;
 
-    for (const p of police) {
-      if (!p.group.visible) continue;
-      if (b.mesh.position.distanceToSquared(p.pos) < 5.5) {
-        p.speed *= 0.2;
-        score.add(SCORE.policeDown, 'Polisi');
-        hud.flash('Polisi tumbang +120', 1.6);
-        hit = true;
+    let kena = false;
+    for (const pol of polisi) {
+      if (!pol.kelompok.visible) continue;
+      if (jarak2(p.position.x, p.position.z, pol.pos.x, pol.pos.z) < 1.8 && p.position.y < 1.8) {
+        kena = true;
+        pol.laju *= 0.4;
+        skor.tambah(SKOR.polisi, 'Polisi terkena');
+        hud.kilat('Polisi terkena tembakan!', 1.4);
         break;
       }
     }
-    if (!hit) {
-      for (const p of peds) {
-        if (b.mesh.position.distanceToSquared(p.pos) < 2.2) {
-          score.add(SCORE.pedDown, 'Pejalan kaki');
-          hit = true;
+    if (!kena) {
+      for (const ped of pejalan) {
+        if (jarak2(p.position.x, p.position.z, ped.pos.x, ped.pos.z) < 1.2 && p.position.y < 1.9) {
+          kena = true;
+          ped.panik = true;
+          skor.tambah(SKOR.pejalan, 'Pejalan kena');
+          hud.kilat('Pejalan kena! Polisi makin agresif.', 1.6);
+          tambahWanted(1);
           break;
         }
       }
     }
-
-    if (hit || b.life <= 0) {
-      scene.remove(b.mesh);
-      bullets.splice(i, 1);
+    if (kena || p.userData.sisa <= 0 || p.position.y < 0) {
+      scene.remove(p);
+      peluru.splice(i, 1);
     }
   }
-}
-
-function addWanted(amount) {
-  const before = state.wanted;
-  state.wanted = clamp(state.wanted + amount, 0, 5);
-  if (state.wanted > before) state.wantedTimer = POLICE.wantedDecaySeconds;
-  hud.setWanted(state.wanted);
-}
-
-// ---------- wanted / police ----------
-function updateWanted(dt) {
-  if (state.wanted > 0) {
-    state.wantedTimer -= dt;
-    if (state.wantedTimer <= 0) {
-      state.wanted = Math.max(0, state.wanted - 1);
-      hud.setWanted(state.wanted);
-      state.wantedTimer = POLICE.wantedDecaySeconds;
-    }
-  }
-  const active = state.wanted > 0;
-  const target = player.inCar ? player.inCar.mesh.position : player.pos;
-  const targetVel = player.inCar
-    ? { x: Math.sin(player.inCar.heading) * player.inCar.speed, z: Math.cos(player.inCar.heading) * player.inCar.speed }
-    : { x: Math.sin(player.heading) * player.speed, z: Math.cos(player.heading) * player.speed };
-  police.forEach((p, i) => {
-    p.group.visible = active && i < state.wanted;
-    if (p.group.visible) p.update(dt, target, true, targetVel);
-  });
-  sound.siren(active);
 }
 
 // ---------- misi ----------
-function updateMission(dt) {
-  const m = missions.active;
-  if (!m) return;
-  const pos = player.inCar ? player.inCar.mesh.position : player.pos;
-  missions.addDistance(pos);
+function jalankanMisi(dt) {
+  if (!state.started || !misi.aktif) return;
+  const pos = pemain.pos;
 
-  if (m.kind === 'go' || m.kind === 'steal') {
-    const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
-    if (d < MISSION.arriveRadius) completeMission(m);
-  } else if (m.kind === 'collect') {
-    missions.timer -= dt;
-    for (const spot of m.spots) {
-      if (spot.taken) continue;
-      if (Math.hypot(pos.x - spot.x, pos.z - spot.z) < MISSION.pickupRadius) {
-        spot.taken = true;
-        missions.collected += 1;
-        score.add(SCORE.mission / 3, 'Kantong');
-        sound.blip(1200, 0.1, 'sine', 0.3);
-        hud.flash(`Kantong ${missions.collected}/${m.count}`, 1.6);
+  if (misi.aktif.jenis === 'kumpul') {
+    misi.sisa -= dt;
+    for (const t of misi.aktif.titik) {
+      if (!t.diambil && jarak2(pos.x, pos.z, t.x, t.z) < MISI_TARGET_JARAK) {
+        t.diambil = true;
+        misi.terkumpul += 1;
+        beriUang(150);
+        hud.kilat('Kantong pasir +$150', 1.6);
+        sound.blip(880, 0.12, 'sine', 0.25);
       }
     }
-    if (missions.collected >= m.count) completeMission(m);
-    if (missions.timer <= 0) failMission('Waktu habis.');
-  } else if (m.kind === 'evade') {
-    if (state.wanted === 0) completeMission(m);
-  } else if (m.kind === 'race') {
-    missions.timer -= dt;
-    if (missions.distance >= m.distance) completeMission(m);
-    if (missions.timer <= 0) failMission('Waktu habis.');
-  }
-  hud.setObjective(missions.objectiveText(pos, state.wanted));
-}
-
-function completeMission(m) {
-  state.cash += m.reward;
-  score.add(SCORE.mission, m.title);
-  hud.setCash(state.cash);
-  hud.setScore(score);
-  hud.flash(`Selesai: ${m.title} (+$${m.reward})`, 3);
-  sound.blip(1040, 0.2, 'triangle', 0.3);
-  missions.active = null;
-  missions.next();
-  setTimeout(() => { if (state.started && !missions.active) startMission(MISSIONS[missions.index]); }, 2500);
-  save();
-}
-
-function failMission(text) {
-  hud.flash(text, 2.5);
-  missions.active = null;
-  setTimeout(() => { if (state.started && !missions.active) startMission(MISSIONS[missions.index]); }, 2200);
-}
-
-// ---------- masuk / keluar mobil ----------
-function nearestCar() {
-  let best = null, bd = CAR.enterRange;
-  const all = [...traffic, ...parked];
-  for (const c of all) {
-    const d = Math.hypot(c.mesh.position.x - player.pos.x, c.mesh.position.z - player.pos.z);
-    if (d < bd) { bd = d; best = c; }
-  }
-  return best;
-}
-
-function toggleCar() {
-  if (player.inCar) {
-    const car = player.inCar;
-    car.driver = null;
-    player.exitCar();
-    state.currentCar = null;
-    hud.setCar('');
-    sound.engine(0);
-    return;
-  }
-  const car = nearestCar();
-  if (!car) return;
-  player.enterCar(car);
-  car.driver = 'player';
-  state.currentCar = car;
-  hud.setCar(car.name || 'Mobil');
-  addWanted(CAR.stealWanted);
-  hud.flash('Mobil dicuri', 1.4);
-  sound.blip(440, 0.1, 'square', 0.2);
-}
-
-// ---------- mengemudi ----------
-function driveCar(dt, move) {
-  const car = player.inCar;
-  if (!car) return;
-  const top = CAR.topSpeed;
-  car.speed += (move.y * top - car.speed) * Math.min(1, dt * CAR.acceleration);
-  if (move.braking) car.speed *= Math.pow(CAR.brakeDamping, dt);
-  if (Math.abs(car.speed) > 0.4) {
-    car.heading += move.x * dt * CAR.turnRate * Math.sign(car.speed) * Math.min(1, Math.abs(car.speed) / 6);
-  }
-  car.pos.x = clamp(car.pos.x + Math.sin(car.heading) * car.speed * dt, -bounds, bounds);
-  car.pos.z = clamp(car.pos.z + Math.cos(car.heading) * car.speed * dt, -bounds, bounds);
-  car.group.position.copy(car.pos);
-  car.group.rotation.y = car.heading;
-  for (const w of car.wheels) w.rotation.x += car.speed * dt * 2.2;
-  sound.engine(Math.abs(car.speed) / top);
-}
-
-// ---------- kamera ----------
-function updateCamera(dt, yaw) {
-  if (player.inCar) {
-    const car = player.inCar;
-    const back = new T.Vector3(Math.sin(car.heading), 0, Math.cos(car.heading)).multiplyScalar(-9);
-    const want = car.mesh.position.clone().add(back).add(new T.Vector3(0, 4.2, 0));
-    camera.position.lerp(want, Math.min(1, dt * 5));
-    camera.lookAt(car.mesh.position.x, 1.4, car.mesh.position.z);
-  } else {
-    const want = new T.Vector3(
-      player.pos.x - Math.sin(yaw) * 6.5,
-      player.pos.y + 3.2,
-      player.pos.z - Math.cos(yaw) * 6.5,
-    );
-    camera.position.lerp(want, Math.min(1, dt * 8));
-    camera.lookAt(player.pos.x, 1.6, player.pos.z);
-  }
-}
-
-// ---------- mode shot ----------
-const shotCtx = { player, camera, traffic, police, pedestrians: peds, cityHalf: half, hud, overlay, daynight };
-const staged = state.started ? '' : stageShot(shot.shot, shotCtx);
-
-// [RONDE 2] Interaksi dengan lalu lintas: menabrak mengurangi nyawa dan
-// memperlambat mobil, lewat dekat tanpa tabrakan memberi skor "nyaris".
-let crashCooldown = 0;
-let nearMissCooldown = 0;
-function updateTrafficInteraction(dt) {
-  if (!player.inCar) return;
-  const car = player.inCar;
-  const speed = Math.abs(car.speed);
-  crashCooldown -= dt;
-  nearMissCooldown -= dt;
-  for (const t of traffic) {
-    if (t.driver !== 'traffic') continue;
-    const d = Math.hypot(t.pos.x - car.pos.x, t.pos.z - car.pos.z);
-    if (d < 2.6 && speed > 4 && crashCooldown <= 0) {
-      crashCooldown = 0.8;
-      player.health = Math.max(0, player.health - 8);
-      hud.setHealth(player.health);
-      hud.flash('Tabrakan! Nyawa -8', 1.4);
-      car.speed *= 0.4;
-      sound.blip(180, 0.18, 'sawtooth', 0.3);
-      addWanted(0.2);
-    } else if (d < 5.5 && speed > 10 && nearMissCooldown <= 0) {
-      nearMissCooldown = 1.2;
-      score.add(SCORE.nearMiss, 'Nyaris tabrak');
+    if (misi.terkumpul >= misi.aktif.jumlah) selesaiMisi();
+    else if (misi.sisa <= 0) gagalMisi('Waktu habis.');
+  } else if (misi.aktif.jenis === 'hindar') {
+    misi.sisa -= dt;
+    if (state.wanted <= 0 && misi.indeks === 2) selesaiMisi();
+    else if (misi.sisa <= 0) gagalMisi('Waktu habis.');
+  } else if (misi.aktif.jenis === 'sprint') {
+    misi.sisa -= dt;
+    misi.tambahJarak(pos);
+    if (misi.jarak >= misi.aktif.jarak) selesaiMisi();
+    else if (misi.sisa <= 0) gagalMisi('Waktu habis.');
+  } else if (misi.aktif.jenis === 'parkir') {
+    misi.sisa -= dt;
+    const t = misi.aktif.target;
+    if (jarak2(pos.x, pos.z, t.x, t.z) < 3.2 && Math.abs(pemain.diMobil?.laju ?? 99) < 0.6) {
+      skor.tambah(SKOR.parkir, 'Parkir presisi');
+      selesaiMisi();
+    } else if (misi.sisa <= 0) gagalMisi('Waktu habis.');
+  } else if (misi.aktif.jenis === 'curi') {
+    if (pemain.diMobil === mobilCuri && jarak2(pos.x, pos.z, misi.aktif.target.x, misi.aktif.target.z) < 10) {
+      selesaiMisi();
     }
+  }
+}
+
+const MISI_TARGET_JARAK = 4;
+
+function selesaiMisi() {
+  const m = misi.aktif;
+  beriUang(m.hadiah);
+  skor.tambah(SKOR.misi, m.judul);
+  hud.kilat(`Misi selesai: ${m.judul} (+$${m.hadiah})`, 3.4);
+  sound.blip(740, 0.2, 'triangle', 0.3);
+  misi.aktif = null;
+  misi.indeks += 1;
+  simpan();
+  if (misi.indeks >= DAFTAR_MISI.length) {
+    akhiri('Kamu menguasai Kota Karang.');
+  } else {
+    misi.mulai(DAFTAR_MISI[misi.indeks]);
+  }
+}
+
+function gagalMisi(alasan) {
+  hud.kilat(`Misi gagal: ${alasan}`, 3);
+  misi.aktif = null;
+  misi.mulai(DAFTAR_MISI[misi.indeks]);
+}
+
+function akhiri(pesan) {
+  state.started = false;
+  state.paused = true;
+  sound.sirene(false);
+  sound.mesin(0);
+  teksAkhir.textContent = pesan;
+  layarAkhir.classList.add('on');
+  document.exitPointerLock?.();
+}
+
+// ---------- mulai / lanjut ----------
+function begin(lanjutkan) {
+  if (state.started) return;
+  if (lanjutkan && muat()) {
+    hud.kilat('Simpanan dimuat.', 1.8);
+  } else if (lanjutkan && !muat()) {
+    lanjutkan = false;
+  }
+  state.started = true;
+  state.paused = false;
+  overlay.classList.add('hidden');
+  hud.tampil(true);
+  hud.aturUang(state.uang);
+  hud.aturWanted(state.wanted);
+  hud.aturNyawa(pemain.nyawa);
+  hud.aturSkor(skor);
+  sound.lanjut();
+  sound.musik(true);
+  if (lanjutkan) sound.sirene(state.wanted > 0);
+  if (!misi.aktif) misi.mulai(DAFTAR_MISI[misi.indeks]);
+}
+
+function berhenti() {
+  state.paused = !state.paused;
+  if (state.paused) {
+    sound.mesin(0);
+    sound.sirene(false);
+    overlay.classList.remove('hidden');
+    document.exitPointerLock?.();
+  } else {
+    overlay.classList.add('hidden');
+    sound.lanjut();
+    if (state.wanted > 0) sound.sirene(true);
   }
 }
 
 // ---------- loop ----------
-let last = performance.now();
-function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
+let terakhir = performance.now();
+function loop(now) {
+  const dt = Math.min((now - terakhir) / 1000, MAX_FRAME);
+  terakhir = now;
+  const { yaw, pitch } = masukan.pandang();
 
-  daynight.update(dt);
-  daynight.apply(scene, sun, hemi);
+  if (state.started && !state.paused) {
+    const aksi = masukan.ambilAksi();
+    if (aksi & AKSI_TEMBAK) tembak();
+    if (aksi & AKSI_JEDA) berhenti();
 
-  if (state.started && !state.paused && !state.over) {
-    const actions = input.takeActions();
-    const move = input.move();
-    const look = input.look();
-
-    if (actions & ACTION_PAUSE) {
-      state.paused = !state.paused;
-      overlay.classList.toggle('hidden', !state.paused);
+    pemain.lentur(dt, masukan.gerak(), yaw, setengahKota);
+    kendalikanMobil(dt);
+    for (const m of lalu) {
+      if (m.pengemudi === 'lalu') {
+        m.gerak(dt);
+        if (Math.abs(m.pos.x) > setengahKota + 8 || Math.abs(m.pos.z) > setengahKota + 8) {
+          const j = dunia.jalan[Math.floor(Math.random() * dunia.jalan.length)];
+          const sepanjang = acak(-setengahKota, setengahKota);
+          const lajur = (Math.random() < 0.5 ? -1 : 1) * 2.6;
+          if (j.vertikal) { m.pos.set(j.di + lajur, 0, sepanjang); m.heading = Math.random() < 0.5 ? 0 : Math.PI; }
+          else { m.pos.set(sepanjang, 0, j.di + lajur); m.heading = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2; }
+          m.kelompok.position.copy(m.pos);
+          m.kelompok.rotation.y = m.heading;
+        }
+      }
     }
-    if (actions & ACTION_CAR) toggleCar();
-    if ((actions & ACTION_FIRE) && !player.inCar) fireBullet();
+    interaksiLalu(dt);
+    langkahPeluru(dt);
 
-    if (player.inCar) driveCar(dt, move);
-    else player.update(dt, move, look.yaw, bounds);
-    updateCamera(dt, look.yaw);
+    const aktif = state.wanted > 0;
+    polisi.forEach((p, i) => {
+      p.kelompok.visible = i < state.wanted;
+      const target = pemain.diMobil
+        ? { x: pemain.diMobil.pos.x, z: pemain.diMobil.pos.z }
+        : { x: pemain.pos.x, z: pemain.pos.z };
+      const kecepatanSasaran = pemain.diMobil
+        ? { x: Math.sin(pemain.heading) * pemain.diMobil.laju, z: Math.cos(pemain.heading) * pemain.diMobil.laju }
+        : { x: Math.sin(pemain.heading) * pemain.laju, z: Math.cos(pemain.heading) * pemain.laju };
+      p.kejar(dt, target, aktif && i < state.wanted, kecepatanSasaran);
+    });
 
-    for (const t of traffic) if (t.driver === 'traffic') t.update(dt);
-    const cars = [...traffic, ...parked];
-    for (const p of peds) p.update(dt, player.pos, state.wanted > 0, cars);
-    updateWanted(dt);
-    updateMission(dt);
-    updateBullets(dt);
-    updateTrafficInteraction(dt);
-    score.update(dt);
-    hud.update(dt);
-    hud.setScore(score);
-    hud.setClock(daynight.clockText(), daynight.isNight);
-    hud.setSpeed(player.inCar ? player.inCar.speed : player.speed, !!player.inCar);
+    for (const ped of pejalan) ped.lentur(dt, pemain.pos, state.wanted > 0, pemain.diMobil ? [pemain.diMobil] : []);
+    jalankanMisi(dt);
+    skor.langkah(dt);
+    hud.langkah(dt);
 
-    const marker = missions.active?.target ?? missions.active?.start ?? null;
-    hud.drawMinimap(
-      player.inCar ? player.inCar.mesh.position : player.pos,
-      player.inCar ? player.inCar.heading : player.heading,
-      half,
-      police.filter((p) => p.group.visible),
-      marker,
-      traffic.filter((t) => t.driver === 'traffic'),
-      peds,
-    );
+    if (aktif) {
+      state.wanted = batas(state.wanted - dt / POLISI.decay, 0, 5);
+      hud.aturWanted(Math.round(state.wanted));
+      if (state.wanted <= 0) sound.sirene(false);
+    }
 
-    state.saveTimer -= dt;
-    if (state.saveTimer <= 0) { save(); state.saveTimer = 5; }
+    siklus.langkah(dt);
+    state.minimapCd -= dt;
+    if (state.minimapCd <= 0) {
+      state.minimapCd = 0.1;
+      const m = misi.aktif;
+      let penandaPos = null;
+      if (m) {
+        if (m.jenis === 'kumpul') {
+          const t = m.titik.find((x) => !x.diambil);
+          penandaPos = t ? { x: t.x, z: t.z } : null;
+        } else {
+          penandaPos = m.target;
+        }
+      }
+      penanda.position.set(penandaPos ? penandaPos.x : 0, 0.3, penandaPos ? penandaPos.z : 0);
+      penanda.visible = !!penandaPos;
+      hud.gambarMinimap(pemain.pos, pemain.heading, setengahKota, polisi, penandaPos, lalu, pejalan);
+    }
+
+    hud.aturObjektif(misi.teksObjektif(pemain.pos, Math.round(state.wanted)));
+    hud.aturSkor(skor);
+    hud.aturJam(siklus.teksJam(), siklus.gelap);
+    hud.aturLaju(pemain.diMobil ? pemain.diMobil.laju : pemain.laju, !!pemain.diMobil);
   }
 
+  siklus.terapkan(scene, matahari, ambient, dunia.lampu);
+  const target = pemain.diMobil
+    ? new T.Vector3(pemain.diMobil.pos.x, 1.1, pemain.diMobil.pos.z)
+    : new T.Vector3(pemain.pos.x, 1.5, pemain.pos.z);
+  const kameraOffset = new T.Vector3(
+    Math.sin(yaw) * Math.cos(pitch) * -6.5,
+    2.4 - pitch * 5,
+    Math.cos(yaw) * Math.cos(pitch) * -6.5,
+  );
+  camera.position.copy(target).add(kameraOffset);
+  camera.lookAt(target.x, target.y + 0.5, target.z);
+
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
 }
-requestAnimationFrame(frame);
+
+// ---------- mode shot ----------
+const mode = tataShot(query.shot || '', {
+  pemain, kamera, lalu, polisi, pejalan, setengahKota, hud, overlay, siklus,
+});
+if (mode !== 'none') {
+  state.started = false;
+  // Biarkan animasi jalan di mode shot supaya gambar terlihat hidup.
+  const acakAnim = setInterval(() => {
+    pemain.animasi();
+    for (const p of polisi) { p.kedip += 0.2; }
+    for (const m of lalu) { m.gerak(0.016); }
+  }, 50);
+  setTimeout(() => clearInterval(acakAnim), 1200);
+  requestAnimationFrame(loop);
+} else {
+  requestAnimationFrame(loop);
+}
+
+btnMulai.addEventListener('click', () => {
+  localStorage.removeItem(KUNCI_SIMPAN);
+  state.wanted = 0;
+  state.uang = 0;
+  misi.indeks = 0;
+  misi.aktif = null;
+  pemain.nyawa = 100;
+  begin(false);
+});
+btnLanjut.addEventListener('click', () => begin(true));
+btnMainLagi.addEventListener('click', () => window.location.reload());
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -453,4 +558,6 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-console.log('[kota-karang]', staged || 'free play', 'seed', shot.seed, 'jam', daynight.clockText());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) terakhir = performance.now();
+});

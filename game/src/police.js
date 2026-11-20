@@ -1,104 +1,96 @@
-// [RONDE 2] Polisi: cruiser yang mengejar dengan prediksi posisi pemain, jadi
-// kejar-kejaran terasa seperti dikepung, bukan cuma diikuti. Lampu bar
-// berkedip dan kecepatan tiap mobil berbeda-beda.
-import { POLICE } from './config.js';
-import { CAR_SPEED, clamp } from './world_config.js';
+// [RONDE 3] Polisi: cruiser yang memprediksi gerak pemain dan saling membagi
+// sisi saat mengejar, jadi kejar-kejaran terasa seperti dikepung.
+import { MOBIL, POLISI } from './config.js';
+import { batas, selisihSudut } from './world_config.js';
 
 const T = window.THREE;
 
-export class PoliceCar {
-  constructor(scene, seed = 0) {
-    this.group = new T.Group();
-    const bodyMat = new T.MeshLambertMaterial({ color: 0xf2f4f6 });
-    const stripeMat = new T.MeshLambertMaterial({ color: 0x14213d });
-    const body = new T.Mesh(new T.BoxGeometry(1.95, 0.55, 4.3), bodyMat);
-    body.position.y = 0.55;
-    const stripe = new T.Mesh(new T.BoxGeometry(2.0, 0.2, 4.32), stripeMat);
-    stripe.position.y = 0.72;
-    const lightBar = new T.Mesh(new T.BoxGeometry(1.1, 0.18, 0.4),
+export class MobilPolisi {
+  constructor(scene, indeks = 0) {
+    this.kelompok = new T.Group();
+    const badanMat = new T.MeshLambertMaterial({ color: 0xf2f4f6 });
+    const garisMat = new T.MeshLambertMaterial({ color: 0x14213d });
+    const badan = new T.Mesh(new T.BoxGeometry(1.95, 0.55, 4.3), badanMat);
+    badan.position.y = 0.55;
+    const garis = new T.Mesh(new T.BoxGeometry(2.0, 0.2, 4.32), garisMat);
+    garis.position.y = 0.72;
+    const batangLampu = new T.Mesh(new T.BoxGeometry(1.1, 0.18, 0.4),
       new T.MeshLambertMaterial({ color: 0x222222 }));
-    lightBar.position.set(0, 1.36, -0.2);
-    this.redLight = new T.Mesh(new T.SphereGeometry(0.14, 8, 6),
+    batangLampu.position.set(0, 1.36, -0.2);
+    this.lampuMerah = new T.Mesh(new T.SphereGeometry(0.14, 8, 6),
       new T.MeshBasicMaterial({ color: 0xff2222 }));
-    this.redLight.position.set(-0.35, 1.5, -0.2);
-    this.blueLight = new T.Mesh(new T.SphereGeometry(0.14, 8, 6),
+    this.lampuMerah.position.set(-0.35, 1.5, -0.2);
+    this.lampuBiru = new T.Mesh(new T.SphereGeometry(0.14, 8, 6),
       new T.MeshBasicMaterial({ color: 0x2266ff }));
-    this.blueLight.position.set(0.35, 1.5, -0.2);
-    const tyreMat = new T.MeshLambertMaterial({ color: 0x14161a });
-    const wheelGeo = new T.CylinderGeometry(0.36, 0.36, 0.3, 10);
-    this.wheels = [];
+    this.lampuBiru.position.set(0.35, 1.5, -0.2);
+    const banMat = new T.MeshLambertMaterial({ color: 0x14161a });
+    const geoRoda = new T.CylinderGeometry(0.36, 0.36, 0.3, 10);
+    this.roda = [];
     for (const [x, z] of [[-0.98, 1.4], [0.98, 1.4], [-0.98, -1.4], [0.98, -1.4]]) {
-      const w = new T.Mesh(wheelGeo, tyreMat);
-      w.rotation.z = Math.PI / 2;
-      w.position.set(x, 0.36, z);
-      this.group.add(w);
-      this.wheels.push(w);
+      const r = new T.Mesh(geoRoda, banMat);
+      r.rotation.z = Math.PI / 2;
+      r.position.set(x, 0.36, z);
+      this.kelompok.add(r);
+      this.roda.push(r);
     }
-    this.group.add(body, stripe, lightBar, this.redLight, this.blueLight);
-    scene.add(this.group);
+    this.kelompok.add(badan, garis, batangLampu, this.lampuMerah, this.lampuBiru);
+    scene.add(this.kelompok);
+
     this.pos = new T.Vector3();
     this.heading = 0;
-    this.speed = 0;
-    this.flashing = 0;
-    this.skill = 0.85 + (seed % 3) * 0.12;   // tiap cruiser punya temperamen
-    this.spin = seed % 2 ? 1 : -1;
+    this.laju = 0;
+    this.kedip = 0;
+    this.kepala = 0.85 + (indeks % 3) * 0.12;
+    this.sisi = indeks % 2 ? 1 : -1;
   }
 
-  /**
-   * target: posisi pemain; targetVel: kecepatan pemain (bisa null).
-   * Polisi membidik titik di depan pemain, bukan posisi sekarang.
-   */
-  update(dt, target, active, targetVel = null) {
-    if (!active) {
-      this.speed *= 0.9;
-      this.group.position.copy(this.pos);
+  kejar(dt, sasaran, aktif, kecepatanSasaran = null) {
+    if (!aktif) {
+      this.laju *= 0.9;
+      this.kelompok.position.copy(this.pos);
       return;
     }
-    const lead = POLICE.leadTime * (targetVel ? Math.hypot(targetVel.x, targetVel.z) / CAR_SPEED : 0);
-    const aimX = target.x + (targetVel ? targetVel.x : 0) * lead;
-    const aimZ = target.z + (targetVel ? targetVel.z : 0) * lead;
-    const dx = aimX - this.pos.x, dz = aimZ - this.pos.z;
-    const dist = Math.hypot(dx, dz);
-    const want = Math.atan2(dx, dz);
-    let diff = want - this.heading;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    this.heading += clamp(diff, -2.9 * this.skill * dt, 2.9 * this.skill * dt);
+    const lead = POLISI.lead * (kecepatanSasaran ? Math.hypot(kecepatanSasaran.x, kecepatanSasaran.z) / MOBIL.top : 0);
+    const bidikX = sasaran.x + (kecepatanSasaran ? kecepatanSasaran.x : 0) * lead;
+    const bidikZ = sasaran.z + (kecepatanSasaran ? kecepatanSasaran.z : 0) * lead;
+    const dx = bidikX - this.pos.x, dz = bidikZ - this.pos.z;
+    const jarak = Math.hypot(dx, dz);
+    const ingin = Math.atan2(dx, dz);
+    this.heading += batas(selisihSudut(this.heading, ingin), -2.9 * this.kepala * dt, 2.9 * this.kepala * dt);
 
-    const top = CAR_SPEED * 1.25 * this.skill;
-    const near = dist > 8 ? top : top * 0.4;
-    this.speed += (near - this.speed) * Math.min(1, dt * 1.4);
-    this.pos.x += Math.sin(this.heading) * this.speed * dt;
-    this.pos.z += Math.cos(this.heading) * this.speed * dt;
+    const puncak = MOBIL.top * 1.25 * this.kepala;
+    const sasaranLaju = jarak > 8 ? puncak : puncak * 0.4;
+    this.laju += (sasaranLaju - this.laju) * Math.min(1, dt * 1.4);
+    this.pos.x += Math.sin(this.heading) * this.laju * dt;
+    this.pos.z += Math.cos(this.heading) * this.laju * dt;
 
-    // sentuhan belok: Bergerak ke sisi target saat sudah dekat.
-    if (dist < 14) {
-      this.pos.x += Math.sin(this.heading + Math.PI / 2) * this.spin * dt * 2.2;
-      this.pos.z += Math.cos(this.heading + Math.PI / 2) * this.spin * dt * 2.2;
+    if (jarak < 14) {
+      this.pos.x += Math.sin(this.heading + Math.PI / 2) * this.sisi * dt * 2.4;
+      this.pos.z += Math.cos(this.heading + Math.PI / 2) * this.sisi * dt * 2.4;
     }
 
-    this.group.position.copy(this.pos);
-    this.group.rotation.y = this.heading;
-    for (const w of this.wheels) w.rotation.x += this.speed * dt * 2.2;
+    this.kelompok.position.copy(this.pos);
+    this.kelompok.rotation.y = this.heading;
+    for (const r of this.roda) r.rotation.x += this.laju * dt * 2.2;
 
-    this.flashing += dt * 12;
-    const on = Math.floor(this.flashing) % 2 === 0;
-    this.redLight.material.color.setHex(on ? 0xff2222 : 0x550000);
-    this.blueLight.material.color.setHex(on ? 0x112255 : 0x2266ff);
+    this.kedip += dt * 12;
+    const nyala = Math.floor(this.kedip) % 2 === 0;
+    this.lampuMerah.material.color.setHex(nyala ? 0xff2222 : 0x550000);
+    this.lampuBiru.material.color.setHex(nyala ? 0x112255 : 0x2266ff);
   }
 }
 
-/** Satu cruiser per bintang wanted, ditempatkan melingkar di sekitar pemain. */
-export function spawnPolice(scene, count) {
-  const list = [];
-  for (let i = 0; i < count; i++) {
-    const car = new PoliceCar(scene, i);
-    const angle = (i / Math.max(1, count)) * Math.PI * 2 + 0.7;
-    car.pos.set(Math.sin(angle) * 55, 0, Math.cos(angle) * 55);
-    car.heading = angle + Math.PI;
-    car.group.position.copy(car.pos);
-    car.group.visible = false;
-    list.push(car);
+/** Satu cruiser per bintang wanted, disebar melingkar di sekitarnya. */
+export function buatPolisi(scene, jumlah) {
+  const daftar = [];
+  for (let i = 0; i < jumlah; i++) {
+    const p = new MobilPolisi(scene, i);
+    const sudut = (i / Math.max(1, jumlah)) * Math.PI * 2 + 0.7;
+    p.pos.set(Math.sin(sudut) * 55, 0, Math.cos(sudut) * 55);
+    p.heading = sudut + Math.PI;
+    p.kelompok.position.copy(p.pos);
+    p.kelompok.visible = false;
+    daftar.push(p);
   }
-  return list;
+  return daftar;
 }

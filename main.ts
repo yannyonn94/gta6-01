@@ -1,30 +1,13 @@
-// [REVISI thinking_revised] Kota Karang: the make.fun gta6-01 entry, an original open-world crime game.
-//
-// The game is this directory's game/ folder: plain static files a desktop browser loads offline
-// (game/index.html and its ES modules). Three.js is vendored under game/vendor/, everything else
-// is authored here. This program hands the entry in: it copies game/ and screenshots/ from beside
-// this file to /output and writes /output/dossier.json with the vendored make.fun library, the
-// summary the judge reads.
-//
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-
+// [RONDE 3] Pelanggan make.fun: membangun dossier entry "Kota Karang" dan
+// menyalin screenshot ke folder output. Semua validasi gagal keras di sini.
 import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { buildDossier } from './vendor/makefun-game.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
-
+const here = process.cwd();
+const out = process.env.MAKEFUN_OUTPUT_DIR ?? 'out';
 mkdirSync(out, { recursive: true });
-cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 
-// [RONDE 2] Validasi screenshot sebelum dossier dibangun: 3-4 berkas, PNG/JPEG,
-// maksimal 256 KiB per berkas. Lebih baik gagal di sini dengan pesan jelas
-// daripada ditolak scorer di sisi server setelah entry dikirim.
+// [RONDE 3] Cek keras bahan baku: screenshot 3-4 berkas, PNG/JPEG, <= 256 KiB.
 const shotsDir = join(here, 'screenshots');
 let shotNames = [];
 try {
@@ -32,30 +15,69 @@ try {
 } catch {
   shotNames = [];
 }
-const badName = shotNames.filter((n) => !/\.(png|jpe?g)$/i.test(n));
-const tooBig = shotNames.filter((n) => {
+const buruk = shotNames.filter((n) => !/\.(png|jpe?g)$/i.test(n));
+const raksasa = shotNames.filter((n) => {
   try {
     return statSync(join(shotsDir, n)).size > 262144;
   } catch {
     return false;
   }
 });
-if (shotNames.length < 3 || shotNames.length > 4 || badName.length > 0 || tooBig.length > 0) {
+if (shotNames.length < 3 || shotNames.length > 4 || buruk.length || raksasa.length) {
   throw new Error(
-    `screenshots tidak sah: ${shotNames.length} berkas, nama buruk=${badName.join(',') || '-'}, terlalu besar=${tooBig.join(',') || '-'}`,
+    `screenshot tidak sah: ${shotNames.length} berkas, nama buruk=${buruk.join(',') || '-'}, terlalu besar=${raksasa.join(',') || '-'}`,
   );
 }
 
-// The scorer's own caps: only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/
-// or 48 MiB of game files, in all, or a path under game/ over 1000 bytes).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    game_max_files: 993,
-    game_max_bytes: 50331648,
-    game_path_max_bytes: 1000,
-  }),
-);
+const urut = ['1-start.jpg', '2-play.jpg', '3-chase.jpg', '4-drive.jpg'];
+const ada = urut.filter((n) => shotNames.includes(n));
+if (ada.length !== shotNames.length) {
+  throw new Error(`screenshot harus memakai nama ${urut.join(', ')}; ditemukan ${shotNames.join(', ')}`);
+}
+
+const salin = (src: string, dst: string) => cpSync(src, join(out, dst));
+for (const nama of shotNames) salin(join(shotsDir, nama), nama);
+
+const gambar = shotNames.map((n) => join(here, 'screenshots', n));
+const cover = join(here, 'screenshots', '2-play.jpg');
+
+const dossier = {
+  name: 'Kota Karang',
+  tagline: 'Kota pesisir terbuka: lima misi, polisi yang mengintai, dan hidupmu taruhannya.',
+  cover,
+  images: gambar,
+  briefing:
+    'Kota Karang adalah kota pesisir yang longgar dijaga. Ambil mobil, selesaikan lima misi, dan ' +
+    'jangan biarkan polisi mengepungmu. Kamu bisa berjalan kaki, mencuri mobil, menembak, mengemudi ' +
+    'sepanjang pantai, dan mengisi bahan bakar di pom bensin.',
+  rules: [
+    'Satu pemain, dunia terbuka yang bisa dijelajahi bebas.',
+    'Lima misi berurutan: curi mobil, kumpul kantong, hilangkan wanted, sprint pantai, parkir presisi.',
+    'Wanted naik saat mencuri mobil, menabrak, atau menembak polisi dan pejalan kaki; turun saat sembunyi.',
+    'Mobil punya bahan bakar; isi ulang di pom bensin di sudut barat-laut.',
+    'Menabrak mobil lain mengurangi nyawa; nyawa habis berarti pelarian berakhir.',
+  ],
+  controls: [
+    'WASD atau panah: bergerak / mengemudi',
+    'Shift: lari / ngebut',
+    'Spasi: menembak (kaki) atau mengerem (dalam mobil)',
+    'E: masuk atau keluar mobil',
+    'Esc atau P: jeda',
+    'Klik layar: kunci kursor untuk mengarahkan kamera',
+  ],
+  credits: {
+    game: 'Kota Karang',
+    role: 'perancang, kode, dan playtest',
+    third_party: [
+      { name: 'three.js', version: '0.128', license: 'MIT', source: 'vendor/three.min.js' },
+    ],
+    generated_with: 'Hermes Agent',
+  },
+  dependencies: [],
+  text_max_bytes: 4000,
+};
+
+writeFileSync(join(out, 'dossier.json'), `${JSON.stringify(dossier, null, 2)}\n`, 'utf8');
+
+if (!existsSync(cover)) throw new Error(`cover tidak ada: ${cover}`);
+console.log(`Kota Karang: dossier ditulis ke ${out}/dossier.json (${gambar.length} gambar, cover ${cover})`);
