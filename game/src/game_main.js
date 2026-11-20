@@ -524,7 +524,7 @@ function loop(now) {
 
 // ---------- mode shot ----------
 const mode = tataShot(query.shot || '', {
-  pemain, kamera, lalu, polisi, pejalan, setengahKota, hud, overlay, siklus,
+  pemain, kamera: camera, lalu, polisi, pejalan, setengahKota, hud, overlay, siklus,
 });
 if (mode !== 'none') {
   state.started = false;
