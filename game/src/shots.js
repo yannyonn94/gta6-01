@@ -12,7 +12,8 @@ export function readShotQuery() {
 /** Tata scene yang diminta. Mengembalikan deskripsi singkat untuk konsol. */
 export function stageShot(name, ctx) {
   const { player, camera, traffic, police, pedestrians, cityHalf, hud, overlay, daynight } = ctx;
-  if (overlay) overlay.classList.add('hidden');
+  // Mode shot saja yang menyembunyikan kartu judul; free play harus menampilkannya.
+  if (overlay && name) overlay.classList.add('hidden');
 
   const setHour = (h) => { if (daynight) daynight.setHour(h); };
 
