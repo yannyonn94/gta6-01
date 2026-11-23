@@ -1,168 +1,180 @@
-// police.js — polisi Kota Karang: mobil patroli, pengejaran dengan
-// kemudi prediktif (mengejar titik di depan pemain), dan roadblock
-// saat buronan 3 bintang atau lebih.
-var KKPOLICE = {
-  list: [],
-  roadblocks: [],
+// police.js — sistem buronan Kota Karang: bintang 0–5, mobil polisi yang
+// mengejar, roadblock di bintang tinggi, dan penangkapan bila pemain
+// tertangkap basah. Polisi memakai mobil yang sama dengan lalu lintas,
+// hanya dicat hitam-putih dengan strobo.
 
-  makeCruiser: function (scene) {
-    var group = new THREE.Group();
-    var bodyMat = new THREE.MeshLambertMaterial({ color: 0x1d4e89 });
-    var whiteMat = new THREE.MeshLambertMaterial({ color: 0xf2ede2 });
-    var darkMat = new THREE.MeshLambertMaterial({ color: 0x22262b });
-    var body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.85, 4.4), bodyMat);
-    body.position.y = 0.85;
-    group.add(body);
-    var cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.7, 2.0), whiteMat);
-    cabin.position.set(0, 1.6, -0.2);
-    group.add(cabin);
-    var lightBar = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.25, 0.5), new THREE.MeshLambertMaterial({ color: 0xd92323 }));
-    lightBar.position.set(0, 2.1, -0.2);
-    group.add(lightBar);
-    var blue = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.25, 0.5), new THREE.MeshBasicMaterial({ color: 0x2a6fd8 }));
-    blue.position.set(-0.32, 2.1, -0.2);
-    group.add(blue);
-    var red = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.25, 0.5), new THREE.MeshBasicMaterial({ color: 0xd92323 }));
-    red.position.set(0.32, 2.1, -0.2);
-    group.add(red);
-    var wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.32, 10);
-    wheelGeo.rotateZ(Math.PI / 2);
-    [[-0.95, 1.35], [0.95, 1.35], [-0.95, -1.35], [0.95, -1.35]].forEach(function (p) {
-      var w = new THREE.Mesh(wheelGeo, darkMat);
-      w.position.set(p[0], 0.42, p[1]);
-      group.add(w);
-    });
-    return { group: group, blue: blue, red: red, lightBar: lightBar };
-  },
+import { WORLD } from './tune.js';
+import { makeCarMesh } from './cars.js';
+import { range, pick } from './rng.js';
 
-  spawn: function (G, count) {
-    while (this.list.length < count && this.list.length < KKCFG.policeMaxActive) {
-      var c = this.makeCruiser(G.scene);
-      var angle = Math.random() * Math.PI * 2;
-      var px = G.player.pos.x + Math.cos(angle) * KKCFG.policeSpawnRadius;
-      var pz = G.player.pos.z + Math.sin(angle) * KKCFG.policeSpawnRadius;
-      px = Math.max(-170, Math.min(170, px));
-      pz = Math.max(-170, Math.min(170, pz));
-      c.group.position.set(px, 0, pz);
-      G.scene.add(c.group);
-      this.list.push({
-        mesh: c.group, blue: c.blue, red: c.red,
-        heading: angle, speed: 0, stunned: 0, flash: Math.random() * 10
-      });
-    }
-  },
+export function createPolice(scene, rng, colliders, hooks) {
+  const units = [];
+  const blocks = [];   // roadblock: barier + 2 mobil
+  let wanted = 0;
+  let quietTimer = 0;
+  let bustTimer = 0;
+  let sirenOn = false;
 
-  despawnExtra: function (G, wantedCount) {
-    while (this.list.length > wantedCount) {
-      var c = this.list.pop();
-      G.scene.remove(c.mesh);
-    }
-  },
-
-  update: function (G, dt) {
-    var wanted = G.wanted;
-    var wantCount = wanted === 0 ? 0 : Math.min(KKCFG.policeMaxActive, 1 + wanted);
-    if (wanted > 0) this.spawn(G, wantCount);
-    else this.despawnExtra(G, 0);
-    var px = G.player.pos.x, pz = G.player.pos.z;
-    var pSpeed = G.player.vehicle ? Math.abs(G.player.vehicle.speed) : G.player.speed;
-    for (var i = 0; i < this.list.length; i++) {
-      var cop = this.list[i];
-      if (cop.stunned > 0) {
-        cop.stunned -= dt;
-        cop.speed *= 0.9;
-        continue;
-      }
-      // Kemudi prediktif: kejar titik di depan pemain sesuai kecepatannya
-      var lookAhead = 0.9 + pSpeed * 0.12;
-      var fx = -Math.sin(G.player.heading), fz = -Math.cos(G.player.heading);
-      var tx = px + fx * pSpeed * lookAhead;
-      var tz = pz + fz * pSpeed * lookAhead;
-      var dx = tx - cop.mesh.position.x, dz = tz - cop.mesh.position.z;
-      var dist = Math.sqrt(dx * dx + dz * dz) || 1;
-      var wantHeading = Math.atan2(-dx, -dz);
-      var diff = wantHeading - cop.heading;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      cop.heading += Math.max(-2.4 * dt, Math.min(2.4 * dt, diff));
-      var topSpeed = KKCFG.policeBaseSpeed + KKCFG.policeSpeedPerStar * wanted;
-      cop.speed += (topSpeed - cop.speed) * Math.min(1, dt * 1.2);
-      var nx = cop.mesh.position.x - Math.sin(cop.heading) * cop.speed * dt;
-      var nz = cop.mesh.position.z - Math.cos(cop.heading) * cop.speed * dt;
-      if (!cityCollides(G.city, nx, nz, 1.4)) {
-        cop.mesh.position.x = nx;
-        cop.mesh.position.z = nz;
-      } else {
-        cop.heading += 0.6; // menghindar dari gedung
-      }
-      cop.mesh.rotation.y = cop.heading;
-      // Lampu strobo merah-biru berkedip
-      cop.flash += dt * 9;
-      var on = Math.sin(cop.flash) > 0;
-      cop.blue.visible = on;
-      cop.red.visible = !on;
-      // Menangkap pemain: kesehatan berkurang, buronan tetap
-      if (dist < KKCFG.policeCatchRadius && G.player.crashCooldown <= 0) {
-        G.player.health = Math.max(0, G.player.health - 12);
-        G.player.crashCooldown = 1.2;
-        KKHUD.toast('Polisi menangkapmu! Kesehatan berkurang.');
-      }
-    }
-    // Roadblock saat buronan 3+: dua mobil polisi melintang di depan pemain
-    if (wanted >= KKCFG.roadblockAtWanted && this.roadblocks.length === 0) {
-      this.buildRoadblock(G);
-    }
-    if (wanted < KKCFG.roadblockAtWanted && this.roadblocks.length > 0) {
-      this.clearRoadblock(G);
-    }
-    // Pindahkan roadblock mengikuti pemain setiap beberapa detik
-    if (this.roadblocks.length > 0) {
-      this._rbTimer = (this._rbTimer || 0) + dt;
-      if (this._rbTimer > 9) {
-        this._rbTimer = 0;
-        this.clearRoadblock(G);
-        this.buildRoadblock(G);
-      }
-    }
-  },
-
-  buildRoadblock: function (G) {
-    var fx = -Math.sin(G.player.heading), fz = -Math.cos(G.player.heading);
-    var cx = G.player.pos.x + fx * 34, cz = G.player.pos.z + fz * 34;
-    for (var k = -1; k <= 1; k++) {
-      var c = this.makeCruiser(G.scene);
-      var ox = -fz * k * 6, oz = fx * k * 6;
-      c.group.position.set(cx + ox, 0, cz + oz);
-      c.group.rotation.y = G.player.heading + Math.PI / 2;
-      G.scene.add(c.group);
-      this.roadblocks.push({ mesh: c.group, blue: c.blue, red: c.red, flash: k * 2 });
-      G.city.colliders.push({ x: cx + ox, z: cz + oz, hw: 2.2, hd: 2.2 });
-    }
-    KKHUD.toast('Roadblock polisi di depan!');
-  },
-
-  clearRoadblock: function (G) {
-    for (var i = 0; i < this.roadblocks.length; i++) {
-      G.scene.remove(this.roadblocks[i].mesh);
-    }
-    // Hapus tiga collider roadblock (yang terakhir ditambahkan ke kota)
-    var removeCount = this.roadblocks.length;
-    if (removeCount > 0) {
-      G.city.colliders.splice(G.city.colliders.length - removeCount, removeCount);
-    }
-    this.roadblocks = [];
-  },
-
-  nearestInLine: function (G, x, z, fx, fz, maxDist) {
-    var best = null, bestD = maxDist;
-    for (var i = 0; i < this.list.length; i++) {
-      var c = this.list[i];
-      var dx = c.mesh.position.x - x, dz = c.mesh.position.z - z;
-      var along = dx * fx + dz * fz;
-      if (along < 0 || along > bestD) continue;
-      var side = Math.abs(dx * fz - dz * fx);
-      if (side < 2.2) { bestD = along; best = c; }
-    }
-    return best;
+  function spawnUnit() {
+    const mesh = makeCarMesh('police', 0xf2f2f2);
+    scene.add(mesh);
+    // Muncul di jalan agak jauh dari pemain.
+    const ang = range(rng, 0, Math.PI * 2);
+    const dist = range(rng, 60, 100);
+    const x = Math.max(-150, Math.min(150, hooks.playerPos().x + Math.cos(ang) * dist));
+    const z = Math.max(-150, Math.min(150, hooks.playerPos().z + Math.sin(ang) * dist));
+    const u = { mesh, pos: new THREE.Vector3(x, 0, z), heading: 0, speed: 0, stuck: 0 };
+    units.push(u);
+    return u;
   }
-};
+
+  function setWanted(n, reason) {
+    const next = Math.max(0, Math.min(5, n));
+    if (next !== wanted) {
+      wanted = next;
+      quietTimer = 0;
+      bustTimer = 0;
+      if (hooks.onWanted) hooks.onWanted(wanted, reason);
+      syncUnits();
+    }
+  }
+
+  function addWanted(n, reason) { setWanted(wanted + n, reason); }
+
+  function syncUnits() {
+    const want = wanted === 0 ? 0 : wanted + 1;
+    while (units.length < want) spawnUnit();
+    while (units.length > want) {
+      const u = units.pop();
+      scene.remove(u.mesh);
+    }
+    const wantSiren = wanted > 0;
+    if (wantSiren !== sirenOn) {
+      sirenOn = wantSiren;
+      if (hooks.onSiren) hooks.onSiren(sirenOn);
+    }
+    // Roadblock mulai bintang 3: barier di jalan depan pemain.
+    if (wanted >= 3 && blocks.length === 0) buildRoadblock();
+    if (wanted < 3 && blocks.length > 0) clearRoadblocks();
+  }
+
+  function buildRoadblock() {
+    const p = hooks.playerPos();
+    const ahead = hooks.playerHeading ? hooks.playerHeading() : 0;
+    const bx = p.x + Math.sin(ahead) * 34;
+    const bz = p.z + Math.cos(ahead) * 34;
+    const g = new THREE.Group();
+    const stripeMat = new THREE.MeshLambertMaterial({ color: 0xffd23e });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x222831 });
+    for (let i = -1; i <= 1; i++) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.0, 0.5), i % 2 === 0 ? stripeMat : darkMat);
+      bar.position.set(i * 3.4, 0.7, 0);
+      g.add(bar);
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.7, 0.3), darkMat);
+      leg.position.set(i * 3.4 - 1.2, 0.35, 0);
+      g.add(leg);
+    }
+    // Tiang tinggi di kedua ujung + balok melintang + lampu kuning berkedip,
+    // supaya roadblock terbaca dari jauh (dan dari balik kemudi).
+    for (const sx of [-5.4, 5.4]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 4.2, 0.5), stripeMat);
+      post.position.set(sx, 2.1, 0);
+      g.add(post);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(11.4, 0.6, 0.6), darkMat);
+    beam.position.set(0, 4.2, 0);
+    g.add(beam);
+    const lamp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.45, 10, 8),
+      new THREE.MeshLambertMaterial({ color: 0xffb020, emissive: 0xff9a00, emissiveIntensity: 1.0 })
+    );
+    lamp.position.set(0, 4.9, 0);
+    g.add(lamp);
+    g.userData.beaconLamp = lamp;
+    g.position.set(bx, 0, bz);
+    g.rotation.y = ahead + Math.PI / 2;
+    scene.add(g);
+    blocks.push({ group: g, x: bx, z: bz });
+    colliders.push({ minX: bx - 5, maxX: bx + 5, minZ: bz - 5, maxZ: bz + 5 });
+    if (hooks.onRoadblock) hooks.onRoadblock(bx, bz);
+  }
+
+  function clearRoadblocks() {
+    for (const b of blocks) scene.remove(b.group);
+    // Hapus collider roadblock (selalu yang terakhir ditambahkan).
+    for (let i = 0; i < blocks.length; i++) colliders.pop();
+    blocks.length = 0;
+  }
+
+  function update(dt, playerPos, playerInCar, playerSpeed) {
+    // Bintang turun sendiri setelah lama tidak berulah.
+    if (wanted > 0) {
+      quietTimer += dt;
+      if (quietTimer > 9 + wanted * 4) setWanted(wanted - 1, 'tenang');
+    }
+    // Penangkapan: polisi sangat dekat dan pemain lambat / jalan kaki.
+    if (wanted > 0) {
+      let nearest = Infinity;
+      for (const u of units) nearest = Math.min(nearest, Math.hypot(u.pos.x - playerPos.x, u.pos.z - playerPos.z));
+      if (nearest < 4 && Math.abs(playerSpeed) < 2) {
+        bustTimer += dt;
+        if (bustTimer > 6 && hooks.onBusted) hooks.onBusted();
+      } else {
+        bustTimer = Math.max(0, bustTimer - dt * 2);
+      }
+    }
+
+    for (const u of units) {
+      const dx = playerPos.x - u.pos.x;      const dz = playerPos.z - u.pos.z;
+      const dist = Math.hypot(dx, dz);
+      const targetHeading = Math.atan2(dx, dz);
+      let turn = targetHeading - u.heading;
+      while (turn > Math.PI) turn -= Math.PI * 2;
+      while (turn < -Math.PI) turn += Math.PI * 2;
+      u.heading += Math.max(-2.4 * dt, Math.min(2.4 * dt, turn));
+      const wantSpeed = Math.min(30, 14 + wanted * 3.5);
+      u.speed += (wantSpeed - u.speed) * Math.min(1, dt * 0.8);
+      u.pos.x += Math.sin(u.heading) * u.speed * dt;
+      u.pos.z += Math.cos(u.heading) * u.speed * dt;
+      // Polisi juga menabrak gedung: perlambat dan belok.
+      for (const c of colliders) {
+        const nx = Math.max(c.minX, Math.min(u.pos.x, c.maxX));
+        const nz = Math.max(c.minZ, Math.min(u.pos.z, c.maxZ));
+        if (Math.hypot(u.pos.x - nx, u.pos.z - nz) < 1.8) {
+          u.heading += Math.PI * 0.6;
+          u.speed *= 0.5;
+          u.pos.x -= Math.sin(u.heading) * 2;
+          u.pos.z -= Math.cos(u.heading) * 2;
+          break;
+        }
+      }
+      // Menabrak mobil pemain: dorong pemain, tambah bintang bila keras.
+      if (dist < 3.6 && hooks.onRam) hooks.onRam(u, dist);
+      u.mesh.position.copy(u.pos);
+      u.mesh.rotation.y = u.heading;
+      // Strobo berkedip.
+      const strobe = u.mesh.userData.strobe;
+      if (strobe) {
+        const on = Math.floor(performance.now() / 180) % 2 === 0;
+        strobe.red.material.emissiveIntensity = on ? 1.6 : 0.15;
+        strobe.blue.material.emissiveIntensity = on ? 0.15 : 1.6;
+      }
+    }
+    // Lampu kuning roadblock berkedip pelan.
+    for (const b of blocks) {
+      const lamp = b.group.userData.beaconLamp;
+      if (lamp) lamp.material.emissiveIntensity = 0.4 + (Math.sin(performance.now() / 240) + 1) * 0.7;
+    }
+    return { wanted, bustTimer };
+  }
+
+  return {
+    units, blocks,
+    get wanted() { return wanted; },
+    setWanted, addWanted, update, syncUnits,
+    reset() {
+      setWanted(0, 'reset');
+      clearRoadblocks();
+    },
+  };
+}
