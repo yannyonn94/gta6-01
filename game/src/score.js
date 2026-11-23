@@ -1,65 +1,44 @@
-// [RONDE 5] Papan skor: skor, kombo, pengali kombo, dan jejak aksi terakhir untuk HUD.
-// Kombo menaikkan pengali: tiap 3 aksi beruntun menambah +1 pengali (maks x4).
-// Jendela kombo ikut memanjang tiap tingkat pengali supaya rantai panjang
-// masih bisa dipertahankan, dan HUD bisa menggambar sisa waktunya.
-import { KOMBO } from './config.js';
-
-export class PapanSkor {
-  constructor() {
-    this.nilai = 0;
-    this.kombo = 0;
-    this.sisaKombo = 0;
-    this.jendelaKombo = KOMBO.jendela;
-    this.jejak = [];
-    this.komboTerbaik = 0;
-  }
-
-  /** Pengali dari kombo saat ini: 1 + floor(kombo/3), dibatasi x4. */
-  get pengali() {
-    return Math.min(4, 1 + Math.floor(this.kombo / 3));
-  }
-
-  tambah(poin, label = '') {
-    if (poin <= 0) return;
-    const efektif = poin * this.pengali;
-    this.nilai += efektif;
-    this.kombo += 1;
-    // Jendela memanjang 0,4 detik per tingkat pengali (maks +1,2 detik).
-    this.jendelaKombo = KOMBO.jendela
-      + Math.min(KOMBO.tambahMaks, (this.pengali - 1) * KOMBO.tambahTingkat);
-    this.sisaKombo = this.jendelaKombo;
-    if (this.kombo > this.komboTerbaik) this.komboTerbaik = this.kombo;
-    if (this.jejak.length > 4) this.jejak.shift();
-    this.jejak.push({ poin: efektif, label, pada: performance.now() });
-  }
-
-  langkah(dt) {
-    if (this.sisaKombo > 0) {
-      this.sisaKombo -= dt;
-      if (this.sisaKombo <= 0) this.kombo = 0;
+// score.js — uang, skor, dan pengali kombo.
+// Tiap 3 aksi berantai menaikkan pengali sampai x4; jendela kombo
+// bertambah panjang di tiap level, dan kombo putus bila waktu habis.
+var KKScore = {
+  add: function (G, action, basePoints) {
+    // Aksi berantai: segarkan jendela kombo dan hitung pengali
+    if (G.comboTimer > 0) {
+      G.comboHits++;
+    } else {
+      G.comboHits = 1;
+      G.comboLevel = 1;
     }
-    const now = performance.now();
-    while (this.jejak.length && now - this.jejak[0].pada > 2600) this.jejak.shift();
-  }
+    var level = Math.min(KKCFG.comboMaxLevel, 1 + Math.floor((G.comboHits - 1) / KKCFG.comboHitsPerLevel));
+    G.comboLevel = level;
+    G.bestCombo = Math.max(G.bestCombo || 1, level);
+    G.comboTimer = KKCFG.comboWindowBase + (level - 1) * KKCFG.comboWindowStep;
+    var gained = Math.round(basePoints * level);
+    G.score += gained;
+    if (action === 'mission') G.money += 0; // hadiah misi sudah ditambah missions.js
+    return gained;
+  },
 
-  get teks() { return String(Math.round(this.nilai)); }
-  get teksKombo() { return this.kombo > 1 ? `x${this.kombo}` : ''; }
-  get teksPengali() { return this.pengali > 1 ? `pengali x${this.pengali}` : ''; }
-  /** Sisa jendela kombo 0..1 untuk bar HUD; 0 kalau kombo sudah putus. */
-  get fraksiKombo() {
-    return this.kombo > 1 ? Math.max(0, Math.min(1, this.sisaKombo / this.jendelaKombo)) : 0;
+  update: function (G, dt) {
+    if (G.comboTimer > 0) {
+      G.comboTimer -= dt;
+      if (G.comboTimer <= 0) {
+        G.comboTimer = 0;
+        G.comboHits = 0;
+        G.comboLevel = 1;
+      }
+    }
+  },
+
+  comboLabel: function (G) {
+    if (G.comboTimer <= 0) return '';
+    return 'KOMBO x' + G.comboLevel + ' (' + G.comboHits + ' aksi)';
+  },
+
+  comboFraction: function (G) {
+    if (G.comboTimer <= 0) return 0;
+    var full = KKCFG.comboWindowBase + (G.comboLevel - 1) * KKCFG.comboWindowStep;
+    return Math.max(0, Math.min(1, G.comboTimer / full));
   }
-  /** Nol-kan semua untuk permainan baru. */
-  reset() {
-    this.nilai = 0;
-    this.kombo = 0;
-    this.sisaKombo = 0;
-    this.jendelaKombo = KOMBO.jendela;
-    this.jejak = [];
-    this.komboTerbaik = 0;
-  }
-  get teksStatus() {
-    const a = this.jejak[this.jejak.length - 1];
-    return a ? `+${a.poin} ${a.label}`.trim() : '';
-  }
-}
+};

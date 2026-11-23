@@ -1,123 +1,175 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Kota Karang</title>
-<link rel="icon" href="data:," />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kota Karang — Dunia Terbuka Pesisir</title>
 <style>
-  :root { --panel: rgba(9, 13, 18, 0.78); --aksen: #f2c94c; --hijau: #9fe3a0; --merah: #ff6b6b; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #0b0f14; color: #e7ecf2;
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
-  canvas#kanvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-
-  #hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s; z-index: 5; }
-  #hud.on { opacity: 1; }
-  .panel { background: var(--panel); border: 1px solid rgba(255,255,255,.08); border-radius: 10px;
-    padding: 8px 12px; backdrop-filter: blur(3px); }
-
-  #topbar { position: absolute; top: 14px; left: 14px; display: flex; gap: 10px; align-items: stretch; }
-  #wanted { font-size: 22px; letter-spacing: 2px; }
-  #jam { font-size: 18px; font-variant-numeric: tabular-nums; }
-
-  #statbar { position: absolute; top: 14px; right: 14px; display: flex; gap: 10px; align-items: stretch; }
-  #uang, #skor { font-size: 18px; font-weight: 600; }
-  #kombo { color: var(--aksen); font-size: 14px; opacity: 0; transition: opacity .2s; }
-
-  #nyawa { width: 160px; height: 8px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; margin-top: 6px; }
-  #nyawa > div { height: 100%; width: 100%; background: var(--hijau); transition: width .2s; }
-  #stamina { width: 160px; height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; margin-top: 4px; }
-  #stamina > div { height: 100%; width: 100%; background: var(--hijau); transition: width .2s; }
-  #kombobar { width: 120px; height: 4px; background: rgba(255,255,255,.12); border-radius: 2px; overflow: hidden; margin-top: 4px; }
-  #kombobar > div { height: 100%; width: 0%; background: var(--aksen); opacity: 0; transition: width .1s linear; }
-  #cuaca { font-size: 13px; font-weight: 600; letter-spacing: 1px; }
-  @keyframes denyut { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
-  #modefoto { position: absolute; left: 50%; top: 16px; transform: translateX(-50%);
-    font-size: 13px; color: #fff; display: none; }
-  #modefoto.on { display: block; }
-
-  #objektif { position: absolute; top: 92px; left: 14px; max-width: 46ch; font-size: 13px; line-height: 1.35; color: #dbe3ee; }
-
-  #speedo { position: absolute; right: 14px; bottom: 18px; text-align: right; }
-  #laju { font-size: 42px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-  #speedo small { font-size: 11px; opacity: .7; }
-  #mobil { font-size: 13px; color: #cfd7e3; }
-  #bahan { font-size: 12px; margin-top: 2px; }
-
-  #pesan { position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%);
-    font-size: 15px; color: #fff; opacity: 0; transition: opacity .2s; white-space: nowrap; }
-
-  #minimap { position: absolute; left: 14px; bottom: 18px; width: 168px; height: 168px;
-    border-radius: 50%; border: 2px solid rgba(255,255,255,.2); }
-
-  #overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(circle at 50% 40%, rgba(20,28,40,.88), rgba(5,8,12,.96)); z-index: 10;
-    transition: opacity .25s; }
-  #overlay.hidden { opacity: 0; pointer-events: none; }
-  .kartu { text-align: center; max-width: 620px; padding: 34px 40px; }
-  .kartu h1 { margin: 0 0 6px; font-size: 44px; letter-spacing: 1px; color: var(--aksen); }
-  .kartu h2 { margin: 0 0 18px; font-weight: 400; font-size: 15px; color: #aeb8c8; }
-  .kartu p { margin: 6px 0; font-size: 14px; color: #cfd7e3; }
-  .kartu button { margin: 8px 4px 0; padding: 12px 22px; font-size: 15px; border: 0; border-radius: 8px;
-    background: var(--aksen); color: #1a1a1a; font-weight: 700; cursor: pointer; }
-  .kartu button.ghost { background: rgba(255,255,255,.12); color: #e7ecf2; }
-  .kartu button:hover { filter: brightness(1.08); }
-  #endTitle { color: var(--aksen); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #101a26; }
+  body { font-family: Verdana, Geneva, Tahoma, sans-serif; color: #f2ede2; }
+  #gameCanvas { display: block; width: 100%; height: 100%; }
+  .panel {
+    background: rgba(16, 26, 38, 0.88);
+    border: 1px solid #e8c33a;
+    border-radius: 8px;
+    padding: 10px 14px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  }
+  #hud { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  #topLeft { position: absolute; top: 14px; left: 14px; min-width: 210px; }
+  #wanted { font-size: 26px; letter-spacing: 3px; color: #e8c33a; line-height: 1.1; }
+  #clock { font-size: 22px; font-weight: bold; color: #ffffff; }
+  #weather { font-size: 14px; color: #c9d4de; margin-top: 2px; }
+  #objectivePanel { position: absolute; top: 118px; left: 14px; max-width: 430px; }
+  #objectivePanel h2 { font-size: 13px; color: #e8c33a; letter-spacing: 1px; margin-bottom: 4px; }
+  #objective { font-size: 15px; line-height: 1.45; color: #ffffff; }
+  #topRight { position: absolute; top: 14px; right: 14px; width: 250px; text-align: right; }
+  #money { font-size: 22px; font-weight: bold; color: #7fc94a; }
+  #score { font-size: 15px; color: #f2ede2; margin-top: 2px; }
+  #combo { font-size: 15px; font-weight: bold; color: #e8c33a; min-height: 18px; margin-top: 2px; }
+  #comboBarWrap { height: 6px; background: #2c3440; border-radius: 3px; margin-top: 4px; overflow: hidden; }
+  #comboBar { height: 100%; width: 0%; background: #e8c33a; }
+  .barLabel { font-size: 12px; color: #c9d4de; margin-top: 8px; display: flex; justify-content: space-between; }
+  .barWrap { height: 10px; background: #2c3440; border-radius: 5px; margin-top: 3px; overflow: hidden; }
+  #healthBar { height: 100%; width: 100%; background: #3f8f5f; }
+  #staminaBar { height: 100%; width: 100%; background: #2a6fd8; }
+  #speedo { position: absolute; right: 14px; bottom: 14px; text-align: right; min-width: 190px; }
+  #speed { font-size: 28px; font-weight: bold; color: #ffffff; }
+  #vehName { font-size: 14px; color: #e8c33a; }
+  #fuel { font-size: 14px; color: #f2ede2; margin-top: 2px; }
+  #fuelBarWrap { height: 8px; background: #2c3440; border-radius: 4px; margin-top: 4px; overflow: hidden; }
+  #fuelBar { height: 100%; width: 100%; background: #e8a33a; }
+  #minimapWrap { position: absolute; left: 14px; bottom: 22px; }
+  #minimap { display: block; border-radius: 50%; background: #101a26; }
+  #minimapLabel { text-align: center; font-size: 11px; color: #f2ede2; margin-top: 4px; background: rgba(16, 26, 38, 0.88); border: 1px solid #e8c33a; border-radius: 6px; padding: 2px 6px; }
+  #toast {
+    position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(16, 26, 38, 0.92); border: 1px solid #e8c33a; border-radius: 8px;
+    padding: 12px 22px; font-size: 17px; font-weight: bold; color: #ffffff;
+    opacity: 0; transition: opacity 0.3s; text-align: center; max-width: 640px;
+  }
+  #photoBanner {
+    display: none; position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(16, 26, 38, 0.92); border: 1px solid #e8c33a; border-radius: 8px;
+    padding: 10px 18px; font-size: 15px; font-weight: bold; color: #e8c33a; text-align: center;
+  }
+  .overlay {
+    position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 16, 24, 0.82);
+  }
+  .card {
+    background: #16222f; border: 2px solid #e8c33a; border-radius: 12px;
+    padding: 30px 36px; max-width: 620px; width: 92%; text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  }
+  .card h1 { font-size: 44px; color: #e8c33a; letter-spacing: 3px; margin-bottom: 6px; }
+  .card h2 { font-size: 26px; color: #e8c33a; margin-bottom: 8px; }
+  .card p { font-size: 16px; line-height: 1.55; color: #f2ede2; margin-bottom: 12px; }
+  .card .pitch { font-size: 17px; color: #ffffff; }
+  .controls { text-align: left; font-size: 14px; line-height: 1.7; color: #d7dee6; margin: 12px auto; max-width: 480px; }
+  .controls b { color: #e8c33a; }
+  .btn {
+    display: inline-block; pointer-events: auto; cursor: pointer;
+    background: #e8c33a; color: #101a26; border: none; border-radius: 8px;
+    font-size: 18px; font-weight: bold; padding: 12px 28px; margin: 6px;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+  }
+  .btn:hover { background: #f2d35c; }
+  .btn.secondary { background: #2c3440; color: #f2ede2; border: 1px solid #e8c33a; }
+  .hint { font-size: 13px; color: #9fb0be; margin-top: 10px; }
+  #pauseMenu, #endScreen { display: none; }
+  #pauseStats { font-size: 15px; line-height: 1.6; color: #ffffff; margin-bottom: 14px; }
+  #endLine { font-size: 17px; }
 </style>
 </head>
 <body>
-<canvas id="kanvas"></canvas>
+<canvas id="gameCanvas"></canvas>
 
 <div id="hud">
-  <div id="topbar">
-    <div class="panel"><span id="wanted">☆☆☆☆☆</span> <span id="jam">08:30</span> <span id="cuaca">Pagi</span></div>
+  <div id="topLeft" class="panel">
+    <div id="wanted">☆☆☆☆☆</div>
+    <div id="clock">11:00</div>
+    <div id="weather">Cerah</div>
   </div>
-  <div id="statbar">
-    <div class="panel">
-      <div><span id="uang">$0</span> &nbsp; <span id="skor">0</span></div>
-      <div id="kombo"></div>
-      <div id="kombobar"><div></div></div>
-    </div>
-    <div class="panel">
-      <div>Nyawa</div>
-      <div id="nyawa"><div></div></div>
-      <div style="margin-top:4px">Stamina</div>
-      <div id="stamina"><div></div></div>
-    </div>
+  <div id="objectivePanel" class="panel">
+    <h2>TUJUAN</h2>
+    <div id="objective">Muat misi…</div>
   </div>
-  <div id="objektif" class="panel">Misi: —</div>
+  <div id="topRight" class="panel">
+    <div id="money">$250</div>
+    <div id="score">Skor 0</div>
+    <div id="combo"></div>
+    <div id="comboBarWrap"><div id="comboBar"></div></div>
+    <div class="barLabel"><span id="healthText">Sehat 100</span><span>Stamina</span></div>
+    <div class="barWrap"><div id="healthBar"></div></div>
+    <div class="barWrap"><div id="staminaBar"></div></div>
+  </div>
   <div id="speedo" class="panel">
-    <div><span id="laju">0</span> <small>km/j</small></div>
-    <div id="namaMobil"></div>
-    <div id="bahan">BBM 100%</div>
+    <div id="speed">0 km/jam</div>
+    <div id="vehName">Jalan kaki</div>
+    <div id="fuel">—</div>
+    <div id="fuelBarWrap"><div id="fuelBar"></div></div>
   </div>
-  <div id="pesan" class="panel"></div>
-  <div id="modefoto" class="panel">MODE FOTO — seret mouse untuk mengorbit, roda mouse zoom, F untuk kembali</div>
-  <canvas id="minimap" width="168" height="168"></canvas>
+  <div id="minimapWrap">
+    <canvas id="minimap" width="160" height="160"></canvas>
+    <div id="minimapLabel">PETA KOTA KARANG</div>
+  </div>
+  <div id="toast"></div>
+  <div id="photoBanner">MODE FOTO — geser mouse untuk memutar kamera, tekan F untuk kembali bermain</div>
 </div>
 
-<div id="overlay">
-  <div class="kartu">
-    <h1 id="judulOverlay">KOTA KARANG</h1>
-    <h2>Kota pesisir terbuka. Tujuh misi, hujan badai, kejar-kejaran, koin emas, dan hidupmu.</h2>
-    <p>WASD bergerak · Shift lari (pakai stamina) · Spasi tembak / rem · E masuk-keluar mobil · H klakson · F mode foto · M bisukan suara · R reset kamera · roda mouse zoom kamera · Esc jeda · klik layar untuk mengunci kursor.</p>
-    <p id="infoJeda"></p>
-    <p>Mode screenshot: <code>?shot=start|play|chase|drive|koin|hujan|foto|end</code> dengan <code>&amp;seed=</code> dan <code>&amp;hour=</code>.</p>
-    <button id="btn-start">Mulai baru</button>
-    <button id="btn-continue" class="ghost">Lanjutkan</button>
+<div id="startOverlay" class="overlay">
+  <div class="card">
+    <h1>KOTA KARANG</h1>
+    <p class="pitch">Dunia terbuka pesisir: curi mobil, kabur dari polisi, dan selesaikan 7 misi di pulau seluas 10 × 10 blok.</p>
+    <div class="controls">
+      <b>WASD / panah</b> jalan &amp; mengemudi &nbsp;•&nbsp; <b>Shift</b> lari / ngebut (pakai stamina)<br>
+      <b>Spasi</b> tembak (jalan kaki) / rem (kendaraan) &nbsp;•&nbsp; <b>E</b> naik / turun kendaraan<br>
+      <b>H</b> klakson &nbsp;•&nbsp; <b>F</b> mode foto &nbsp;•&nbsp; <b>M</b> bisukan suara<br>
+      <b>R</b> reset kamera &nbsp;•&nbsp; <b>Roda mouse</b> zoom &nbsp;•&nbsp; <b>Esc / P</b> jeda<br>
+      Klik layar untuk mengunci pointer dan mengarahkan kamera.
+    </div>
+    <button id="startBtn" class="btn">MULAI BARU</button>
+    <button id="continueBtn" class="btn secondary">LANJUTKAN</button>
+    <p class="hint">Mode screenshot: buka dengan ?shot=start|play|chase|drive&amp;seed=7&amp;hour=17 — HUD tampil, overlay sembunyi.</p>
   </div>
 </div>
 
-<div id="end">
-  <div class="kartu">
-    <h1 id="endTitle">Selesai</h1>
-    <p id="endText"></p>
-    <button id="btn-again">Main lagi</button>
+<div id="pauseMenu" class="overlay">
+  <div class="card">
+    <h2>JEDA</h2>
+    <p id="pauseStats"></p>
+    <button id="resumeBtn" class="btn">LANJUT MAIN</button>
+    <button id="restartBtn" class="btn secondary">ULANG DARI AWAL</button>
+  </div>
+</div>
+
+<div id="endScreen" class="overlay">
+  <div class="card">
+    <h2 id="endTitle">PERJALANAN BERAKHIR</h2>
+    <p id="endLine"></p>
+    <button id="againBtn" class="btn">MAIN LAGI</button>
   </div>
 </div>
 
 <script src="vendor/three.min.js"></script>
-<script type="module" src="src/game_main.js"></script>
+<script src="src/config.js"></script>
+<script src="src/world_config.js"></script>
+<script src="src/random.js"></script>
+<script src="src/input.js"></script>
+<script src="src/city.js"></script>
+<script src="src/vehicles.js"></script>
+<script src="src/player.js"></script>
+<script src="src/police.js"></script>
+<script src="src/pedestrians.js"></script>
+<script src="src/missions.js"></script>
+<script src="src/daynight.js"></script>
+<script src="src/fuel.js"></script>
+<script src="src/score.js"></script>
+<script src="src/hud.js"></script>
+<script src="src/gta_sound.js"></script>
+<script src="src/shots.js"></script>
+<script src="src/game_main.js"></script>
 </body>
 </html>

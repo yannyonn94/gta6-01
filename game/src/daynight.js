@@ -1,168 +1,155 @@
-// [RONDE 5] Siklus siang-malam: matahari berputar, langit berubah, lampu
-// kota menyala saat gelap, bintang dan bulan muncul di malam hari,
-// hujan menggelapkan langit, dan jam bisa diatur untuk mode screenshot.
-import { HARI, HUJAN } from './config.js';
-import { batas } from './world_config.js';
+// daynight.js — jam, matahari dan bulan, warna langit, dan cuaca hujan.
+// Hujan datang dan pergi; saat hujan jalan licin dan warga berteduh.
+var KKDAY = {
+  hour: 11,
+  raining: false,
+  rainAmount: 0,      // 0 kering .. 1 badai
+  _rainTimer: 40,
+  _nextRainIn: 55,
+  rainDrops: null,
 
-const GELAP = 0x0a0f1e;
-const FAJAR = 0xd98a5a;
-const TENGAH = 0x87b5d9;
-const SENJA = 0xc96f4a;
+  init: function (scene) {
+    // Hujan: titik-titik putih jatuh di sekitar kamera
+    var count = 900;
+    var positions = new Float32Array(count * 3);
+    for (var i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 90;
+      positions[i * 3 + 1] = Math.random() * 30;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 90;
+    }
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    var mat = new THREE.PointsMaterial({ color: 0xcfe4f2, size: 0.28, transparent: true, opacity: 0.85 });
+    this.rainDrops = new THREE.Points(geo, mat);
+    this.rainDrops.visible = false;
+    scene.add(this.rainDrops);
+    // Bintang malam: titik-titik di kubah langit, hanya terlihat saat gelap
+    var starCount = 400;
+    var starPos = new Float32Array(starCount * 3);
+    for (var s = 0; s < starCount; s++) {
+      var a = Math.random() * Math.PI * 2;
+      var el = Math.random() * Math.PI * 0.45 + 0.08;
+      starPos[s * 3] = Math.cos(a) * Math.cos(el) * 480;
+      starPos[s * 3 + 1] = Math.sin(el) * 480;
+      starPos[s * 3 + 2] = Math.sin(a) * Math.cos(el) * 480;
+    }
+    var starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    this.stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false }));
+    this.stars.visible = false;
+    scene.add(this.stars);
+  },
 
-/** Bintang: titik-titik putih di kubah langit, transparan di siang hari. */
-export function buatBintang(scene) {
-  const T = window.THREE;
-  const jumlah = 420;
-  const pos = new Float32Array(jumlah * 3);
-  for (let i = 0; i < jumlah; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const e = Math.random() * Math.PI * 0.45 + 0.08;
-    const r = 700;
-    pos[i * 3] = Math.cos(a) * Math.cos(e) * r;
-    pos[i * 3 + 1] = Math.sin(e) * r;
-    pos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r;
-  }
-  const geo = new T.BufferGeometry();
-  geo.setAttribute('position', new T.BufferAttribute(pos, 3));
-  const mat = new T.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0 });
-  const bintang = new T.Points(geo, mat);
-  scene.add(bintang);
-  return bintang;
-}
+  setHour: function (hour) {
+    this.hour = ((hour % 24) + 24) % 24;
+  },
 
-/** Bulan: cakram pucat yang menggantung di langit malam. */
-export function buatBulan(scene) {
-  const T = window.THREE;
-  const bulan = new T.Mesh(
-    new T.CircleGeometry(18, 24),
-    new T.MeshBasicMaterial({ color: 0xe8ecf4, transparent: true, opacity: 0, fog: false }),
-  );
-  bulan.position.set(-260, 260, -420);
-  bulan.lookAt(0, 0, 0);
-  scene.add(bulan);
-  return bulan;
-}
+  setRain: function (on, amount) {
+    this.raining = on;
+    this.rainAmount = on ? (amount || 0.7) : 0;
+    if (this.rainDrops) this.rainDrops.visible = on;
+    if (on) KKSound.rain(true);
+    else KKSound.rain(false);
+  },
 
-/** Hujan: titik-titik jatuh di sekitar titik pusat, mengikuti pemain. */
-export function buatHujan(scene, jumlah = 700) {
-  const T = window.THREE;
-  const pos = new Float32Array(jumlah * 3);
-  for (let i = 0; i < jumlah; i++) {
-    pos[i * 3] = (Math.random() - 0.5) * 90;
-    pos[i * 3 + 1] = Math.random() * 30;
-    pos[i * 3 + 2] = (Math.random() - 0.5) * 90;
-  }
-  const geo = new T.BufferGeometry();
-  geo.setAttribute('position', new T.BufferAttribute(pos, 3));
-  const mat = new T.PointsMaterial({
-    color: 0xaec6e0, size: 0.22, sizeAttenuation: true, transparent: true, opacity: 0,
-  });
-  const hujan = new T.Points(geo, mat);
-  hujan.visible = false;
-  scene.add(hujan);
-  return {
-    mesh: hujan,
-    /** Jatuhkan tetes dan pusatkan awan hujan di atas (x, z). */
-    langkah(dt, x, z, intensitas) {
-      const p = geo.attributes.position.array;
-      for (let i = 0; i < jumlah; i++) {
-        p[i * 3 + 1] -= dt * 26;
-        if (p[i * 3 + 1] < 0) {
-          p[i * 3 + 1] = 24 + Math.random() * 6;
-          p[i * 3] = x + (Math.random() - 0.5) * 90;
-          p[i * 3 + 2] = z + (Math.random() - 0.5) * 90;
+  update: function (G, dt) {
+    // Jam berjalan pelan: satu hari penuh = dayLengthSec detik
+    if (!G.frozen) {
+      this.hour += (dt / KKCFG.dayLengthSec) * 24;
+      if (this.hour >= 24) this.hour -= 24;
+    }
+    // Siklus hujan acak, kecuali misi badai memaksa hujan
+    if (KKMISSIONS.index === 6 && KKMISSIONS.state === 'active') {
+      if (!this.raining) this.setRain(true, 1);
+    } else {
+      this._rainTimer -= dt;
+      if (this._rainTimer <= 0) {
+        if (this.raining) {
+          this.setRain(false, 0);
+          this._rainTimer = 45 + Math.random() * 50;
+        } else {
+          this.setRain(true, 0.45 + Math.random() * 0.35);
+          this._rainTimer = 25 + Math.random() * 25;
         }
       }
-      geo.attributes.position.needsUpdate = true;
-      hujan.visible = intensitas > 0.02;
-      mat.opacity = Math.min(0.85, intensitas * 0.85);
-    },
-  };
-}
+    }
+    G.raining = this.raining;
+    G.rainAmount = this.rainAmount;
+    G.hour = this.hour;
 
-function campur(a, b, t) {
-  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
-  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
-  return (
-    (Math.round(ar + (br - ar) * t) << 16) |
-    (Math.round(ag + (bg - ag) * t) << 8) |
-    Math.round(ab + (bb - ab) * t)
-  );
-}
+    // Matahari / bulan dan warna langit
+    var h = this.hour;
+    var sunAngle = ((h - 6) / 12) * Math.PI; // 06:00 terbit, 18:00 terbenam
+    var sunH = Math.sin(sunAngle);
+    var dayFactor = Math.max(0, Math.min(1, sunH * 1.6 + 0.25));
+    var duskFactor = Math.max(0, 1 - Math.abs(sunH) * 4) * (h > 12 ? 1 : 0.6);
+    var sky = new THREE.Color(KKWORLD.skyDay).lerp(new THREE.Color(KKWORLD.skyNight), 1 - dayFactor);
+    if (duskFactor > 0) sky.lerp(new THREE.Color(KKWORLD.skyDusk), duskFactor * 0.7);
+    if (this.raining) sky.lerp(new THREE.Color(KKWORLD.skyRain), this.rainAmount * 0.65);
+    G.scene.background = sky;
+    if (G.scene.fog) {
+      G.scene.fog.color.copy(sky);
+      G.scene.fog.near = this.raining ? 40 : 120;
+      G.scene.fog.far = this.raining ? 160 : 520;
+    }
+    // Cahaya matahari
+    if (G.sunLight) {
+      G.sunLight.position.set(Math.cos(sunAngle) * 180, Math.max(12, sunH * 160 + 20), 60);
+      G.sunLight.intensity = 0.25 + dayFactor * 0.95 - this.rainAmount * 0.45;
+      G.sunLight.color.setHex(duskFactor > 0.3 ? 0xffb36b : 0xfff2d8);
+    }
+    if (G.ambientLight) {
+      G.ambientLight.intensity = 0.35 + dayFactor * 0.4;
+    }
+    // Bintang hanya terlihat di malam yang cerah
+    if (this.stars) {
+      this.stars.visible = (dayFactor < 0.25 && !this.raining);
+    }
+    // Lampu mercusuar berputar di malam hari
+    if (G.city && G.city.lighthouseBeam) {
+      var night = dayFactor < 0.4;
+      G.city.lighthouseBeam.visible = night;
+      if (night) {
+        G.city.lighthouseBeam.rotation.y = G.elapsed * 0.7;
+        G.city.lighthouseBeam.rotation.z = Math.PI / 2;
+        G.city.lighthouseBeam.rotation.x = 0;
+        // Putar sinar mengelilingi menara
+        var a = G.elapsed * 0.7;
+        G.city.lighthouseBeam.position.set(
+          KKWORLD.lighthouse.x + Math.cos(a) * 21,
+          6 + KKWORLD.lighthouse.height + 2,
+          KKWORLD.lighthouse.z + Math.sin(a) * 21
+        );
+        G.city.lighthouseBeam.lookAt(KKWORLD.lighthouse.x + Math.cos(a) * 60, 6 + KKWORLD.lighthouse.height + 2, KKWORLD.lighthouse.z + Math.sin(a) * 60);
+      }
+      if (G.city.lighthouseLight) G.city.lighthouseLight.intensity = night ? 1.4 : 0.25;
+    }
+    // Hujan jatuh
+    if (this.rainDrops && this.raining) {
+      var pos = this.rainDrops.geometry.attributes.position;
+      for (var i = 0; i < pos.count; i++) {
+        var y = pos.getY(i) - dt * (22 + this.rainAmount * 14);
+        if (y < 0) y = 28 + Math.random() * 4;
+        pos.setY(i, y);
+      }
+      pos.needsUpdate = true;
+      // Hujan mengikuti pemain
+      this.rainDrops.position.x = G.player.pos.x;
+      this.rainDrops.position.z = G.player.pos.z;
+    }
+  },
 
-export class SiklusHari {
-  constructor() {
-    this.jam = HARI.mulai;
-    this.hujan = 0; // 0 cerah .. 1 hujan deras
-  }
+  clockLabel: function () {
+    var h = Math.floor(this.hour);
+    var m = Math.floor((this.hour - h) * 60);
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  },
 
-  aturJam(h) { this.jam = ((h % 24) + 24) % 24; }
-
-  /** Set intensitas hujan 0..1; langit ikut menggelap. */
-  aturHujan(v) { this.hujan = batas(v, 0, 1); }
-
-  /** Nama periode hari untuk HUD: Pagi, Siang, Sore, atau Malam. */
-  teksPeriode() {
-    const j = this.jam;
-    if (j < 5 || j >= 20) return 'Malam';
-    if (j < 11) return 'Pagi';
-    if (j < 16) return 'Siang';
-    return 'Sore';
-  }
-
-  /** Nama cuaca dari intensitas hujan: Cerah, Hujan, atau Hujan deras. */
-  teksCuaca() {
-    if (this.hujan > 0.6) return 'Hujan deras';
-    if (this.hujan > 0.3) return 'Hujan';
+  weatherLabel: function () {
+    if (this.raining) return this.rainAmount > 0.85 ? 'Badai' : 'Hujan';
+    var h = this.hour;
+    if (h < 6 || h >= 19) return 'Malam';
+    if (h >= 17) return 'Senja';
     return 'Cerah';
   }
-
-  langkah(dt) { this.jam = (this.jam + (dt / HARI.detik) * 24) % 24; }
-
-  get terang() { return batas(Math.sin(((this.jam - 6) / 12) * Math.PI), 0, 1); }
-  get gelap() { return this.terang < 0.22; }
-
-  teksJam() {
-    const h = Math.floor(this.jam);
-    const m = Math.floor((this.jam - h) * 60);
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
-
-  warnaLangit() {
-    const j = this.jam;
-    let dasar;
-    if (j < 5 || j >= 20) dasar = GELAP;
-    else if (j < 8) dasar = campur(GELAP, FAJAR, (j - 5) / 3);
-    else if (j < 12) dasar = campur(FAJAR, TENGAH, (j - 8) / 4);
-    else if (j < 17) dasar = TENGAH;
-    else if (j < 20) dasar = campur(TENGAH, SENJA, (j - 17) / 3);
-    else dasar = GELAP;
-    // Hujan menarik langit ke arah abu-abu gelap.
-    return campur(dasar, 0x4a5560, this.hujan * HUJAN.gelap);
-  }
-
-  /** Terapkan ke scene: latar, kabut, matahari, cahaya ambient, bintang, bulan. */
-  terapkan(scene, matahari, ambient, lampu = null, bintang = null, bulan = null) {
-    const t = this.terang;
-    const langit = this.warnaLangit();
-    scene.background.setHex(langit);
-    scene.fog.color.setHex(langit);
-
-    const sudut = ((this.jam - 6) / 12) * Math.PI;
-    matahari.position.set(Math.cos(sudut) * 240, Math.max(14, Math.sin(sudut) * 200), 80);
-    // Senja/malam tetap bisa dimainkan: cahaya minimum dinaikkan supaya
-    // polisi dan mobil tetap terlihat, bukan siluet hitam. Hujan meredupkan lagi.
-    matahari.intensity = (0.28 + 0.72 * t) * (1 - this.hujan * 0.45);
-    matahari.color.setHex(t > 0.6 ? 0xfff2d0 : t > 0.2 ? 0xffc48a : 0x9fb4d8);
-
-    ambient.intensity = 0.38 + 0.5 * t;
-    ambient.color.setHex(campur(0x2a3550, 0xbfdcff, t));
-    ambient.groundColor.setHex(campur(0x141a1c, 0x3a4a3a, t));
-
-    if (lampu) for (const l of lampu) l.visible = this.gelap;
-    // Bintang dan bulan hanya terlihat saat gelap.
-    const kegelapan = 1 - t;
-    if (bintang) bintang.material.opacity = this.gelap ? kegelapan * 0.9 : 0;
-    if (bulan) bulan.material.opacity = this.gelap ? kegelapan * 0.95 : 0;
-  }
-}
+};

@@ -1,83 +1,81 @@
-# Kota Karang
+# Kota Karang — Dunia Terbuka Pesisir
+
+Kota Karang adalah game aksi dunia terbuka 3D berbahasa Indonesia: jelajahi kota pulau 10 blok kali 10 blok, curi mobil, kabur dari polisi, dan selesaikan 7 misi. Kota ini punya 3 jenis kendaraan (mobil, motor, van logistik), sistem buronan 0–5 bintang dengan roadblock, lalu lintas dan pejalan kaki, siklus siang-malam, hujan yang membuat jalan licin, SPBU, stamina, kombo skor sampai x4, minimap bundar, mode foto, dan suara sintetis WebAudio.
 
 [![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
 [![rank](https://make.fun/badge/gta6-01/yannyonn94/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01)
 [![reward](https://make.fun/badge/gta6-01/yannyonn94/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01)
 
-Game aksi dunia terbuka untuk bounty make.fun [`gta6-01`](https://make.fun/bounty/gta6-01). Dibangun dari nol di
-sesi ini: semua file di `game/src/` ditulis baru, bukan salinan dari versi
-sebelumnya. Ronde 5 menambah misi ketujuh (Badai Karang: antar van saat hujan),
-hujan yang membuat jalan licin, roadblock polisi di wanted 3+, van logistik,
-mode foto (F), turis di antara pejalan kaki, lapak pasar, mercusuar dengan sorot
-berputar, bar sisa kombo, menu jeda berstatistik, dan indikator cuaca di HUD.
+## Cara bermain
 
-## Perubahan ronde 5
+Jalankan server statis dari root repo, lalu buka gamenya di browser desktop:
 
-- Misi ketujuh **Badai Karang**: antar van logistik ke gudang pantai barat di tengah hujan deras.
-- Cuaca hujan bergantian: jalan licin, langit menggelap, derau hujan, pejalan kaki bergegas berteduh.
-- Roadblock polisi saat wanted 3+: palang dan kerucut menutup jalan di depan pemain.
-- **Mode foto (F)**: bekukan permainan, sembunyikan HUD, orbit kamera dengan seret mouse.
-- Van logistik yang bisa dicuri (lambat, stabil, tangki 140), turis di antara pejalan kaki, lapak pasar, mercusuar dengan sorot berputar, zebra cross.
-- Menu jeda menampilkan progres; bar sisa kombo; indikator cuaca; tombol M bisukan suara; R mereset kamera.
-
-## Main
-
-```bash
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+```
+node serve.ts
 ```
 
-Node menjalankan TypeScript langsung (type stripping), jadi tidak perlu langkah `tsc` terpisah.
+Buka http://localhost:8099/ dan klik **MULAI BARU**. Klik layar sekali untuk mengunci pointer dan mengarahkan kamera dengan mouse.
 
-`main.ts` menvalidasi screenshot lalu menuliskan `out/dossier.json` dan
-menyalin `screenshots/1-start.jpg` … `4-drive.jpg` ke `out/`.
+Untuk mode screenshot (dipakai mengambil 4 gambar di folder `screenshots/`), buka dengan parameter URL, contohnya:
 
-## Menjalankan
-
-```bash
-npx tsx serve.ts
-# lalu buka http://127.0.0.1:8099/
 ```
+http://localhost:8099/?shot=chase&seed=7&hour=17
+```
+
+Nama shot yang didukung: `start`, `play`, `chase`, `drive`, `koin`, `hujan`, `foto`, `end`.
 
 ## Kontrol
 
-- `WASD` / panah: bergerak, mengemudi
-- `Shift`: lari / ngebut (pakai stamina)
-- `Spasi`: menembak (kaki) atau mengerem (dalam mobil)
-- `E`: masuk / keluar mobil
-- `H`: klakson
-- `F`: mode foto (bekukan, sembunyikan HUD, orbit kamera dengan seret mouse)
-- Roda mouse: zoom kamera
-- `Esc` / `P`: jeda (menampilkan progres misi, skor, uang, dan nyawa)
-- Klik layar: kunci kursor untuk kamera
+- **WASD / panah** — jalan dan mengemudi
+- **Shift** — lari atau ngebut (memakai stamina)
+- **Spasi** — tembak saat jalan kaki, rem saat berkendara
+- **E** — naik atau turun kendaraan
+- **H** — klakson
+- **F** — mode foto (permainan membeku, HUD hilang, geser mouse untuk memutar kamera)
+- **M** — bisukan suara
+- **R** — reset kamera
+- **Roda mouse** — zoom kamera
+- **Esc / P** — jeda (menu jeda menampilkan statistik progres)
+- **Klik layar** — kunci pointer untuk mengarahkan kamera
 
-## Fitur
+## Misi (7, berurutan)
 
-- Kota 10×10 blok dengan gedung, pohon palem, lampu jalan, trotoar, pantai, dermaga, lapak pasar, dan mercusuar.
-- Siklus siang–malam: matahari bergerak, langit berubah, lampu menyala, bintang dan bulan di malam hari, sorot mercusuar berputar saat gelap.
-- Hujan bergantian: jalan licin (akselerasi dan belok berkurang), langit menggelap, pejalan kaki bergegas berteduh, derau hujan.
-- Tujuh misi: curi mobil, kumpul kantong, hilangkan wanted, sprint pantai, parkir presisi, koin Karang, dan antar van saat badai.
-- Polisi memprediksi gerak pemain dan membagi sisi saat mengejar; makin tinggi wanted, makin cepat dan akurat, makin lambat reda, dan wanted 3+ memunculkan roadblock di depan pemain.
-- Pejalan kaki empat tipe (biasa, pelari, santai, turis yang berhenti memotret): menyeberang, menghindar mobil, dan panik saat wanted.
-- Motor yang bisa dicuri: lebih cepat dan lincah dari mobil. Van logistik yang bisa dicuri: lambat, stabil, tangki besar.
-- Bahan bakar mobil dan dua pom bensin (barat-laut dan tenggara); peringatan BBM rendah.
-- Stamina untuk lari (diam memulihkan lebih cepat), klakson, dan zoom kamera; misi selesai memulihkan sedikit nyawa.
-- Peluru bergerak dan bisa mengenai polisi atau pejalan kaki.
-- Skor, kombo dengan pengali (maks x4) dan jendela yang memanjang tiap tingkat, nyaris-tabrak, minimap, speedometer, jam + periode hari, dan indikator cuaca.
-- Mode foto (F): bekukan permainan, sembunyikan HUD, orbit kamera bebas.
-- Mode screenshot: `?shot=start|play|chase|drive|koin|hujan|end&seed=1&hour=18`.
+1. **Kereta Mati** — curi mobil biru dari garasi dan antar ke dermaga.
+2. **Kantong Hilang** — kumpulkan 8 kantong yang tersebar di kota.
+3. **Hilang Sejenak** — polisi mengenalimu; sembunyi sampai buronan hilang.
+4. **Sprint Pantai** — tempuh 420 meter di sepanjang pantai sebelum waktu habis.
+5. **Parkir Presisi** — parkir rapi di dalam kotak kuning yang ditandai.
+6. **Koin Karang** — kumpulkan 5 koin emas yang tersebar di kota.
+7. **Badai Karang** — antar van logistik ke gudang pesisir barat dalam hujan badai, melewati roadblock; jarak dan hitung mundur tampil di tujuan.
 
-## Mode screenshot
+## Sistem
 
-```text
-index.html?shot=start
-index.html?shot=play&seed=1
-index.html?shot=chase&hour=18.5
-index.html?shot=drive&hour=18.2
-index.html?shot=koin&hour=10.5
-index.html?shot=hujan&hour=15
-index.html?shot=end&hour=22
+- **Buronan 0–5 bintang**: naik saat mencuri kendaraan, menabrak, atau menembak; turun saat bersembunyi. Semakin tinggi, polisi semakin cepat dan akurat; pada 3 bintang ke atas polisi memasang roadblock.
+- **Bahan bakar**: setiap kendaraan punya tangki; isi ulang di SPBU barat laut atau tenggara. Van lambat dan stabil dengan tangki besar; motor cepat dan ringan.
+- **Stamina**: lari memakai stamina; diam memulihkan stamina lebih cepat. Menyelesaikan misi memulihkan sedikit kesehatan.
+- **Kombo**: tiap 3 aksi berantai menaikkan pengali sampai x4, dan jendela kombo makin panjang di tiap level.
+- **Cuaca**: hujan datang dan pergi; jalan jadi licin, langit menggelap, suara hujan berbunyi, dan pejalan kaki berlari ke tempat berteduh.
+
+## Screenshot
+
+Empat screenshot di `screenshots/` diambil langsung dari game yang berjalan di
+Chromium headless (1280×720, software WebGL) lewat mode staging `shots.js`:
+
+1. `1-start.jpg` — pandangan udara kota di siang hari (`?shot=start&hour=11`)
+2. `2-play.jpg` — jalan kaki di jalan utama dekat pasar, misi 1 berjalan (`?shot=play&hour=11`)
+3. `3-chase.jpg` — tiga mobil polisi mengejar di sore hari, buronan 3 bintang (`?shot=chase&hour=17`)
+4. `4-drive.jpg` — van logistik menembus hujan badai dengan roadblock di depan (`?shot=drive&hour=16`)
+
+Tiap gambar dikonversi ke JPEG kualitas 82 dan dibatasi 256 KiB.
+
+## Struktur kode
+
+Semua kode game ada di `game/src/` (satu file satu tugas): `config.js`, `world_config.js`, `random.js`, `input.js`, `city.js`, `vehicles.js`, `player.js`, `police.js`, `pedestrians.js`, `missions.js`, `daynight.js`, `fuel.js`, `score.js`, `hud.js`, `gta_sound.js`, `shots.js`, dan `game_main.js`. Rendering 3D memakai three.js 0.128 (MIT) yang disertakan di `game/vendor/three.min.js`.
+
+## Membangun dossier
+
+```
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
 
-## Lisensi
-
-MIT. `game/vendor/three.min.js` milik three.js, lisensi MIT.
+Perintah ini menyalin screenshot dan menulis `out/dossier.json`.

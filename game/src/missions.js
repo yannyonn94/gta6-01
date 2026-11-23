@@ -1,119 +1,270 @@
-// [RONDE 5] Tujuh misi: curi mobil, kumpul kantong, hilangkan wanted, sprint,
-// parkir presisi, koin Karang, dan antar van saat badai. Setiap misi punya
-// objektif dan penanda yang jelas.
-import { MISI, KOINS } from './config.js';
-import { formatJarak, formatWaktu } from './world_config.js';
+// missions.js — mesin misi Kota Karang: 7 misi berurutan dengan
+// tujuan, penanda di dunia, timer, dan hadiah uang.
+// Setiap misi menulis teks tujuannya sendiri ke HUD.
+var KKMISSIONS = {
+  index: 0,          // 0..6 misi aktif, 7 = semua selesai
+  state: 'idle',     // idle | active | done
+  timer: 0,
+  progress: 0,
+  collected: 0,
+  sprintStart: null,
+  sprintDist: 0,
+  hideTimer: 0,
+  markers: [],
+  markerMesh: null,
+  bagMeshes: [],
+  coinMeshes: [],
+  targetVehicle: null,
 
-export const DAFTAR_MISI = [
-  {
-    id: 'm1', judul: 'Kereta Mati',
-    briefing: 'Ambil mobil biru di garasi dan bawa ke dermaga.',
-    jenis: 'curi', target: { x: 0, z: -190 }, hadiah: MISI.hadiah[0],
-  },
-  {
-    id: 'm2', judul: 'Kantong Pasir',
-    briefing: 'Kumpulkan 3 kantong di blok pasar sebelum polisi tiba.',
-    jenis: 'kumpul', jumlah: 3, hadiah: MISI.hadiah[1],
-    titik: [
-      { x: 120, z: 40, diambil: false },
-      { x: -90, z: 110, diambil: false },
-      { x: 30, z: -60, diambil: false },
-    ],
-  },
-  {
-    id: 'm3', judul: 'Hilang Sejenak',
-    briefing: 'Polisi sudah tahu. Turunkan bintang wanted kamu.',
-    jenis: 'hindar', waktu: 45, hadiah: MISI.hadiah[2],
-  },
-  {
-    id: 'm4', judul: 'Sprint Pantai',
-    briefing: 'Tempuh 420 meter sebelum waktu habis.',
-    jenis: 'sprint', waktu: 40, jarak: MISI.jarakSprint, hadiah: MISI.hadiah[3],
-  },
-  {
-    id: 'm5', judul: 'Parkir Presisi',
-    briefing: 'Parkir di garasi dalam 30 detik, mesin mati.',
-    jenis: 'parkir', waktu: 30, target: { x: 60, z: 120 }, hadiah: MISI.hadiah[4],
-  },
-  {
-    id: 'm6', judul: 'Koin Karang',
-    briefing: 'Kumpulkan 5 koin emas yang tersebar di kota sebelum waktu habis.',
-    jenis: 'koin', jumlah: KOINS.jumlah, waktu: KOINS.waktu, hadiah: MISI.hadiah[5],
-    titik: [
-      { x: -140, z: -140, diambil: false },
-      { x: 150, z: -100, diambil: false },
-      { x: -60, z: 150, diambil: false },
-      { x: 100, z: 160, diambil: false },
-      { x: 0, z: 0, diambil: false },
-    ],
-  },
-  {
-    id: 'm7', judul: 'Badai Karang',
-    briefing: 'Hujan deras. Ambil van logistik di dekat pasar dan antar ke gudang pantai barat sebelum waktu habis.',
-    jenis: 'antar', waktu: 60, target: { x: -150, z: 150 }, hadiah: MISI.hadiah[6],
-    butuhVan: true,
-  },
-];
+  NAMES: [
+    'Kereta Mati',
+    'Kantong Hilang',
+    'Hilang Sejenak',
+    'Sprint Pantai',
+    'Parkir Presisi',
+    'Koin Karang',
+    'Badai Karang'
+  ],
 
-export class MisiState {
-  constructor() {
-    this.indeks = 0;
-    this.aktif = null;
-    this.terkumpul = 0;
-    this.sisa = 0;
-    this.jarak = 0;
-    this.posAkhir = null;
+  objectiveText: function (G) {
+    switch (this.index) {
+      case 0: return 'Misi 1 Kereta Mati: curi mobil biru di garasi, antar ke dermaga.';
+      case 1: return 'Misi 2 Kantong Hilang: kumpulkan ' + this.collected + '/' + KKCFG.missionBagCount + ' kantong di kota.';
+      case 2: return 'Misi 3 Hilang Sejenak: sembunyi sampai buronan hilang (' + Math.ceil(this.hideTimer) + ' dtk).';
+      case 3: return 'Misi 4 Sprint Pantai: tempuh ' + Math.floor(this.sprintDist) + '/' + KKCFG.missionSprintMeters + ' m di pantai — ' + Math.ceil(this.timer) + ' dtk.';
+      case 4: return 'Misi 5 Parkir Presisi: parkir rapi di dalam kotak kuning.';
+      case 5: return 'Misi 6 Koin Karang: kumpulkan ' + this.collected + '/' + KKCFG.missionCoinCount + ' koin emas.';
+      case 6: return 'Misi 7 Badai Karang: antar van ke gudang barat — ' + Math.floor(this.progress) + ' m lagi, ' + Math.ceil(this.timer) + ' dtk, hujan badai!';
+      default: return 'Semua misi selesai! Kota Karang milikmu.';
+    }
+  },
+
+  start: function (G) {
+    this.index = 0;
+    this.state = 'active';
+    this.setupMission(G);
+    KKHUD.toast('Misi 1: Kereta Mati — curi mobil biru di garasi!');
+  },
+
+  // Penanda silinder emas melayang di titik tujuan.
+  setMarker: function (G, x, z) {
+    this.clearMarker(G);
+    var mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.2, 2.2, 0.4, 20),
+      new THREE.MeshBasicMaterial({ color: 0xe8c33a, transparent: true, opacity: 0.8 })
+    );
+    mesh.position.set(x, 0.4, z);
+    G.scene.add(mesh);
+    var pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.12, 26, 6),
+      new THREE.MeshBasicMaterial({ color: 0xe8c33a, transparent: true, opacity: 0.5 })
+    );
+    pole.position.set(x, 13, z);
+    G.scene.add(pole);
+    this.markerMesh = mesh;
+    this._pole = pole;
+  },
+  clearMarker: function (G) {
+    if (this.markerMesh) { G.scene.remove(this.markerMesh); this.markerMesh = null; }
+    if (this._pole) { G.scene.remove(this._pole); this._pole = null; }
+  },
+  clearPickups: function (G) {
+    var self = this;
+    this.bagMeshes.forEach(function (m) { G.scene.remove(m); });
+    this.coinMeshes.forEach(function (m) { G.scene.remove(m); });
+    this.bagMeshes = [];
+    this.coinMeshes = [];
+  },
+
+  setupMission: function (G) {
+    this.clearPickups(G);
+    this.collected = 0;
+    this.progress = 0;
+    var W = KKWORLD;
+    if (this.index === 0) {
+      // Mobil biru sudah disiapkan di garasi oleh game_main
+      this.setMarker(G, W.pier.x, W.pier.z);
+    } else if (this.index === 1) {
+      G.city.bagSpots.forEach(function (spot) {
+        var bag = new THREE.Mesh(
+          new THREE.BoxGeometry(1.1, 0.8, 0.8),
+          new THREE.MeshLambertMaterial({ color: 0x8a5a2e })
+        );
+        bag.position.set(spot.x, 0.6, spot.z);
+        G.scene.add(bag);
+        KKMISSIONS.bagMeshes.push(bag);
+      });
+      this.setMarker(G, G.city.bagSpots[0].x, G.city.bagSpots[0].z);
+    } else if (this.index === 2) {
+      this.hideTimer = KKCFG.missionHideTime;
+      this.clearMarker(G);
+    } else if (this.index === 3) {
+      this.timer = KKCFG.missionSprintTime;
+      this.sprintDist = 0;
+      this.sprintStart = { x: G.player.pos.x, z: G.player.pos.z };
+      this.setMarker(G, 150, 190);
+    } else if (this.index === 4) {
+      this.setMarker(G, W.parkBay.x, W.parkBay.z);
+      // Kotak parkir kuning di tanah
+      var bay = new THREE.Mesh(
+        new THREE.PlaneGeometry(5, 8),
+        new THREE.MeshBasicMaterial({ color: 0xe8c33a, transparent: true, opacity: 0.55 })
+      );
+      bay.rotation.x = -Math.PI / 2;
+      bay.position.set(W.parkBay.x, 0.12, W.parkBay.z);
+      G.scene.add(bay);
+      this._bay = bay;
+    } else if (this.index === 5) {
+      G.city.coinSpots.forEach(function (spot) {
+        var coin = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.0, 1.0, 0.25, 18),
+          new THREE.MeshLambertMaterial({ color: 0xf2c230, emissive: 0x664400 })
+        );
+        coin.rotation.x = Math.PI / 3; // miring supaya terbaca dari berbagai sudut
+        coin.position.set(spot.x, 1.4, spot.z);
+        G.scene.add(coin);
+        KKMISSIONS.coinMeshes.push(coin);
+      });
+      this.setMarker(G, G.city.coinSpots[0].x, G.city.coinSpots[0].z);
+    } else if (this.index === 6) {
+      this.timer = 150;
+      G.raining = true;
+      G.rainAmount = 1;
+      // Van logistik disiapkan game_main; roadblock muncul karena wanted 3
+      G.wanted = Math.max(G.wanted, 3);
+      this.setMarker(G, W.warehouse.x, W.warehouse.z);
+      KKHUD.toast('Badai Karang: hujan deras! Antar van ke gudang barat, awas roadblock.');
+    }
+  },
+
+  completeMission: function (G) {
+    var reward = KKCFG.missionReward[this.index] || 500;
+    G.money += reward;
+    KKScore.add(G, 'mission', reward);
+    G.player.health = Math.min(KKCFG.maxHealth, G.player.health + KKCFG.missionHeal);
+    KKHUD.toast('Misi selesai! +$' + reward);
+    KKSound.jingle();
+    this.index++;
+    if (this._bay) { G.scene.remove(this._bay); this._bay = null; }
+    if (this.index >= 7) {
+      this.state = 'done';
+      this.clearMarker(G);
+      this.clearPickups(G);
+      KKHUD.toast('SEMUA MISI SELESAI! Kamu legenda Kota Karang.');
+      G.gameWon = true;
+      return;
+    }
+    this.setupMission(G);
+    KKHUD.toast('Misi ' + (this.index + 1) + ': ' + this.NAMES[this.index]);
+  },
+
+  update: function (G, dt) {
+    if (this.state !== 'active') return;
+    var p = G.player;
+    var W = KKWORLD;
+    // Putar koin dan penanda (koin staging shot diam menghadap kamera)
+    var t = G.elapsed;
+    this.coinMeshes.forEach(function (c, i) {
+      if (!c.userData.fixedShot) {
+        c.rotation.y = t * KKCFG.coinSpinSpeed + i;
+      }
+      c.position.y = 1.4 + Math.sin(t * 2 + i) * 0.25;
+    });
+    if (this.markerMesh) {
+      this.markerMesh.position.y = 0.4 + Math.sin(t * 2.4) * 0.15;
+      this.markerMesh.rotation.y = t * 0.8;
+    }
+
+    if (this.index === 0) {
+      // Selesai bila pemain (dengan mobil biru atau jalan kaki) sampai di dermaga
+      var dx = p.pos.x - W.pier.x, dz = p.pos.z - W.pier.z;
+      if (dx * dx + dz * dz < 130) this.completeMission(G);
+    } else if (this.index === 1) {
+      for (var i = this.bagMeshes.length - 1; i >= 0; i--) {
+        var bag = this.bagMeshes[i];
+        var bdx = p.pos.x - bag.position.x, bdz = p.pos.z - bag.position.z;
+        if (bdx * bdx + bdz * bdz < 6) {
+          G.scene.remove(bag);
+          this.bagMeshes.splice(i, 1);
+          this.collected++;
+          KKScore.add(G, 'bag', KKCFG.scoreBag);
+          KKSound.pickup();
+          if (this.bagMeshes.length > 0) {
+            var nb = this.bagMeshes[0];
+            this.setMarker(G, nb.position.x, nb.position.z);
+          }
+        }
+      }
+      if (this.collected >= KKCFG.missionBagCount) this.completeMission(G);
+    } else if (this.index === 2) {
+      // Hitung mundur hanya bila benar-benar tidak ada polisi di dekatmu
+      var copNear = false;
+      KKPOLICE.list.forEach(function (c) {
+        var dx = c.mesh.position.x - p.pos.x, dz = c.mesh.position.z - p.pos.z;
+        if (dx * dx + dz * dz < 25 * 25) copNear = true;
+      });
+      if (G.wanted === 0 && !copNear) {
+        this.hideTimer -= dt;
+        if (this.hideTimer <= 0) this.completeMission(G);
+      } else {
+        this.hideTimer = KKCFG.missionHideTime;
+      }
+    } else if (this.index === 3) {
+      this.timer -= dt;
+      // Jarak tempuh di zona pantai (tepi pulau)
+      var onBeach = Math.abs(p.pos.x) > 165 || Math.abs(p.pos.z) > 165;
+      if (onBeach) {
+        var step = p.vehicle ? Math.abs(p.vehicle.speed) * dt : p.speed * dt;
+        this.sprintDist += step;
+      }
+      if (this.sprintDist >= KKCFG.missionSprintMeters) this.completeMission(G);
+      else if (this.timer <= 0) {
+        this.timer = KKCFG.missionSprintTime;
+        this.sprintDist = 0;
+        KKHUD.toast('Waktu habis! Sprint pantai diulang dari awal.');
+      }
+    } else if (this.index === 4) {
+      var pdx = p.pos.x - W.parkBay.x, pdz = p.pos.z - W.parkBay.z;
+      var inBay = (pdx * pdx + pdz * pdz) < KKCFG.missionParkRadius * KKCFG.missionParkRadius;
+      var slow = p.vehicle ? Math.abs(p.vehicle.speed) < 1.5 : p.speed < 1.5;
+      var angleOk = true;
+      if (p.vehicle) {
+        var ah = Math.abs(Math.sin(p.heading - W.parkBay.angle));
+        angleOk = ah < KKCFG.missionParkAngle;
+      }
+      if (inBay && slow && angleOk) {
+        this._parkHold = (this._parkHold || 0) + dt;
+        if (this._parkHold > 1.5) { this._parkHold = 0; this.completeMission(G); }
+      } else {
+        this._parkHold = 0;
+      }
+    } else if (this.index === 5) {
+      for (var j = this.coinMeshes.length - 1; j >= 0; j--) {
+        var coin = this.coinMeshes[j];
+        var cdx = p.pos.x - coin.position.x, cdz = p.pos.z - coin.position.z;
+        if (cdx * cdx + cdz * cdz < 7) {
+          G.scene.remove(coin);
+          this.coinMeshes.splice(j, 1);
+          this.collected++;
+          KKScore.add(G, 'coin', KKCFG.scoreCoin);
+          KKSound.pickup();
+          if (this.coinMeshes.length > 0) {
+            var nc = this.coinMeshes[0];
+            this.setMarker(G, nc.position.x, nc.position.z);
+          }
+        }
+      }
+      if (this.collected >= KKCFG.missionCoinCount) this.completeMission(G);
+    } else if (this.index === 6) {
+      this.timer -= dt;
+      var wdx = p.pos.x - W.warehouse.x, wdz = p.pos.z - W.warehouse.z;
+      this.progress = Math.sqrt(wdx * wdx + wdz * wdz);
+      var inVan = p.vehicle && p.vehicle.kind === 'van';
+      if (this.progress < 14 && inVan) this.completeMission(G);
+      else if (this.timer <= 0) {
+        this.timer = 150;
+        KKHUD.toast('Waktu habis! Badai Karang diulang — van tetap di tempatmu.');
+      }
+    }
   }
-
-  mulai(m) {
-    for (const t of m.titik ?? []) t.diambil = false;
-    this.aktif = m;
-    this.terkumpul = 0;
-    this.sisa = m.waktu ?? 0;
-    this.jarak = 0;
-    this.posAkhir = null;
-  }
-
-  lanjut() {
-    this.indeks = Math.min(this.indeks + 1, DAFTAR_MISI.length - 1);
-    return DAFTAR_MISI[this.indeks];
-  }
-
-  tambahJarak(pos) {
-    if (this.aktif?.jenis !== 'sprint') return;
-    if (this.posAkhir) this.jarak += Math.hypot(pos.x - this.posAkhir.x, pos.z - this.posAkhir.z);
-    this.posAkhir = { x: pos.x, z: pos.z };
-  }
-
-  teksObjektif(pos, wanted, diVan = false) {
-    const m = this.aktif;
-    if (!m) return 'Misi: —';
-    const nomor = `Misi ${this.indeks + 1}/${DAFTAR_MISI.length} · `;
-    if (m.jenis === 'curi') {
-      const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
-      return `${nomor}${m.judul}: ${m.briefing} (${formatJarak(d)})`;
-    }
-    if (m.jenis === 'kumpul') {
-      return `${nomor}${m.judul}: ${this.terkumpul}/${m.jumlah} kantong (${formatWaktu(this.sisa)})`;
-    }
-    if (m.jenis === 'hindar') {
-      return `${nomor}${m.judul}: turunkan wanted (${wanted > 0 ? `${wanted}★` : 'bersih'})`;
-    }
-    if (m.jenis === 'sprint') {
-      return `${nomor}${m.judul}: ${Math.round(this.jarak)}/${m.jarak} m (${formatWaktu(this.sisa)})`;
-    }
-    if (m.jenis === 'parkir') {
-      const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
-      return `${nomor}${m.judul}: ${formatJarak(d)}, berhenti di zona (${formatWaktu(this.sisa)})`;
-    }
-    if (m.jenis === 'koin') {
-      return `${nomor}${m.judul}: ${this.terkumpul}/${m.jumlah} koin (${formatWaktu(this.sisa)})`;
-    }
-    if (m.jenis === 'antar') {
-      const d = Math.hypot(pos.x - m.target.x, pos.z - m.target.z);
-      const naik = m.butuhVan && !diVan ? ' — ambil van dulu!' : '';
-      return `${nomor}${m.judul}: ${formatJarak(d)} ke gudang (${formatWaktu(this.sisa)})${naik}`;
-    }
-    return `${nomor}${m.judul}`;
-  }
-}
+};

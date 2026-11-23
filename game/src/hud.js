@@ -1,175 +1,162 @@
-// [RONDE 5] HUD: wanted, uang, skor, jam, speedometer, bahan bakar, objektif,
-// stamina, cuaca, bar sisa kombo, dan minimap yang menampilkan lalu lintas,
-// pejalan kaki, dan polisi.
-import { KOTA } from './config.js';
+// hud.js — semua pembaruan DOM Kota Karang: bintang buronan, jam, cuaca,
+// uang, skor, kombo, bar kesehatan dan stamina, teks tujuan, kecepatan,
+// bahan bakar, toast pesan, minimap bundar di kanvas, dan banner mode foto.
+var KKHUD = {
+  _toastTimer: null,
+  _els: {},
 
-export class Hud {
-  constructor() {
-    this.root = document.getElementById('hud');
-    this.elWanted = document.getElementById('wanted');
-    this.elUang = document.getElementById('uang');
-    this.elSkor = document.getElementById('skor');
-    this.elKombo = document.getElementById('kombo');
-    this.elKomboBar = document.querySelector('#kombobar > div');
-    this.elJam = document.getElementById('jam');
-    this.elCuaca = document.getElementById('cuaca');
-    this.elLaju = document.getElementById('laju');
-    this.elMobil = document.getElementById('namaMobil');
-    this.elBahan = document.getElementById('bahan');
-    this.elObjektif = document.getElementById('objektif');
-    this.elPesan = document.getElementById('pesan');
-    this.elNyawa = document.querySelector('#nyawa > div');
-    this.elStamina = document.querySelector('#stamina > div');
-    this.kanvas = document.getElementById('minimap');
-    this.ctx = this.kanvas.getContext('2d');
-    this.timerPesan = 0;
-    this.lajuLama = -1;
-  }
-
-  tampil(on) { this.root.classList.toggle('on', on); }
-
-  aturWanted(level) {
-    let s = '';
-    for (let i = 0; i < 5; i++) s += i < level ? '★' : '☆';
-    this.elWanted.textContent = s;
-    this.elWanted.style.color = level >= 3 ? '#ff6b6b' : level > 0 ? '#f2c94c' : '#8b93a3';
-    // Wanted tinggi membuat panel berkedip pelan sebagai peringatan.
-    this.elWanted.parentElement.style.animation = level >= 3 ? 'denyut 1s infinite' : '';
-  }
-
-  /** Label cuaca: teks lengkap ("Hujan deras · Sore" atau "Cerah · Pagi"). */
-  aturCuaca(hujan, periode) {
-    if (!this.elCuaca) return;
-    this.elCuaca.textContent = periode;
-    this.elCuaca.style.color = hujan > 0.3 ? '#9fb4d8' : '#f2c94c';
-  }
-
-  aturUang(v) { this.elUang.textContent = `$${Math.round(v)}`; }
-  aturNyawa(v) { this.elNyawa.style.width = `${Math.max(0, Math.min(100, v))}%`; }
-
-  /** Bar stamina: penuh hijau, menipis jadi kuning lalu merah. */
-  aturStamina(v) {
-    if (!this.elStamina) return;
-    const p = Math.max(0, Math.min(100, v));
-    this.elStamina.style.width = `${p}%`;
-    this.elStamina.style.background = p > 50 ? '#9fe3a0' : p > 20 ? '#f2c94c' : '#ff6b6b';
-  }
-
-  aturObjektif(t) { this.elObjektif.textContent = t; }
-
-  aturSkor(s) {
-    this.elSkor.textContent = s.teks;
-    const label = s.teksKombo || s.teksPengali || s.teksStatus;
-    this.elKombo.textContent = label;
-    this.elKombo.style.opacity = label ? '1' : '0';
-    // Bar tipis di bawah label kombo: sisa jendela sebelum kombo putus.
-    if (this.elKomboBar) {
-      const f = s.fraksiKombo ?? 0;
-      this.elKomboBar.style.width = `${Math.round(f * 100)}%`;
-      this.elKomboBar.style.opacity = f > 0 ? '1' : '0';
+  init: function () {
+    var ids = ['wanted', 'clock', 'weather', 'money', 'score', 'combo', 'comboBar',
+      'healthBar', 'healthText', 'staminaBar', 'objective', 'speed', 'vehName',
+      'fuel', 'fuelBar', 'toast', 'photoBanner', 'minimap', 'pauseStats', 'endTitle', 'endLine'];
+    for (var i = 0; i < ids.length; i++) {
+      this._els[ids[i]] = document.getElementById(ids[i]);
     }
-  }
+  },
 
-  aturJam(teks, gelap) {
-    this.elJam.textContent = teks;
-    this.elJam.style.color = gelap ? '#9fb4d8' : '#f2c94c';
-  }
+  toast: function (msg) {
+    var el = this._els.toast;
+    if (!el) return;
+    el.textContent = msg;
+    el.style.opacity = '1';
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    var self = this;
+    this._toastTimer = setTimeout(function () { el.style.opacity = '0'; }, 3400);
+  },
 
-  aturLaju(ms, diMobil) {
-    const kmh = Math.round(Math.abs(ms) * 3.6);
-    if (kmh !== this.lajuLama) {
-      this.elLaju.textContent = String(kmh);
-      this.lajuLama = kmh;
+  stars: function (n) {
+    var s = '';
+    for (var i = 0; i < 5; i++) s += (i < n) ? '★' : '☆';
+    return s;
+  },
+
+  update: function (G) {
+    var e = this._els;
+    if (e.wanted) {
+      e.wanted.textContent = this.stars(G.wanted);
+      e.wanted.style.color = G.wanted >= 3 ? '#ff5a4e' : '#e8c33a';
     }
-    this.elLaju.parentElement.style.opacity = diMobil ? '1' : '0.35';
-  }
-
-  aturMobil(nama) { this.elMobil.textContent = nama || ''; }
-
-  aturBahan(persen, kosong, rendah = false) {
-    this.elBahan.textContent = rendah ? `BBM ${persen} — RENDAH` : `BBM ${persen}`;
-    this.elBahan.style.color = kosong || rendah ? '#ff6b6b' : '#9fe3a0';
-    this.elBahan.parentElement.style.opacity = '1';
-  }
-
-  kilat(teks, detik = 2.4) {
-    this.elPesan.textContent = teks;
-    this.elPesan.style.opacity = '1';
-    this.timerPesan = detik;
-  }
-
-  /** Sembunyikan pesan kilat seketika (dipakai saat masuk mode foto). */
-  sembunyikanPesan() {
-    this.timerPesan = 0;
-    this.elPesan.style.opacity = '0';
-  }
-
-  langkah(dt) {
-    if (this.timerPesan > 0) {
-      this.timerPesan -= dt;
-      if (this.timerPesan <= 0) this.elPesan.style.opacity = '0';
+    if (e.clock) e.clock.textContent = KKDAY.clockLabel();
+    if (e.weather) e.weather.textContent = KKDAY.weatherLabel() + (G.raining ? ' (' + Math.round(G.rainAmount * 100) + '%)' : '');
+    if (e.money) e.money.textContent = '$' + Math.floor(G.money);
+    if (e.score) e.score.textContent = 'Skor ' + Math.floor(G.score);
+    if (e.combo) e.combo.textContent = KKScore.comboLabel(G);
+    if (e.comboBar) e.comboBar.style.width = Math.round(KKScore.comboFraction(G) * 100) + '%';
+    if (e.healthBar) {
+      e.healthBar.style.width = Math.max(0, G.player.health) + '%';
+      e.healthBar.style.backgroundColor = G.player.health < 30 ? '#d92323' : '#3f8f5f';
     }
-  }
-
-  gambarMinimap(pos, heading, setengah, polisi, penanda, lalu = [], pejalan = [], pom = []) {
-    const ctx = this.ctx;
-    const ukuran = this.kanvas.width;
-    const skala = ukuran / (setengah * 2.2);
-    const ke = (x, z) => [ukuran / 2 + x * skala, ukuran / 2 + z * skala];
-
-    ctx.clearRect(0, 0, ukuran, ukuran);
-    ctx.fillStyle = 'rgba(10,14,18,.85)';
-    ctx.fillRect(0, 0, ukuran, ukuran);
-
-    ctx.strokeStyle = 'rgba(200,205,215,.28)';
-    ctx.lineWidth = 2;
-    const langkahJalan = KOTA.block + KOTA.roadWidth;
-    for (let i = 0; i <= KOTA.grid; i++) {
-      const c = -setengah + i * langkahJalan + 6;
-      const [x1, y1] = ke(c, -setengah), [x2, y2] = ke(c, setengah);
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-      const [a1, b1] = ke(-setengah, c), [a2, b2] = ke(setengah, c);
-      ctx.beginPath(); ctx.moveTo(a1, b1); ctx.lineTo(a2, b2); ctx.stroke();
+    if (e.healthText) e.healthText.textContent = 'Sehat ' + Math.ceil(G.player.health);
+    if (e.staminaBar) {
+      e.staminaBar.style.width = Math.max(0, G.player.stamina) + '%';
+      e.staminaBar.style.backgroundColor = G.player.stamina < 20 ? '#d92323' : '#2a6fd8';
     }
-
-    ctx.fillStyle = '#d8b13c';
-    for (const m of lalu) {
-      const [x, y] = ke(m.pos.x, m.pos.z);
-      ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+    if (e.objective) e.objective.textContent = KKMISSIONS.objectiveText(G);
+    var speedKmh = 0, vehName = 'Jalan kaki', fuelPct = 0;
+    if (G.player.vehicle) {
+      speedKmh = Math.round(Math.abs(G.player.vehicle.speed) * 3.6);
+      vehName = G.player.vehicle.name;
+      fuelPct = KKFUEL.percent(G.player.vehicle);
+    } else {
+      speedKmh = Math.round(G.player.speed * 3.6);
     }
-
-    ctx.fillStyle = '#b9c2d0';
-    for (const p of pejalan) {
-      const [x, y] = ke(p.pos.x, p.pos.z);
-      ctx.fillRect(x - 1, y - 1, 2, 2);
+    if (e.speed) e.speed.textContent = speedKmh + ' km/jam';
+    if (e.vehName) e.vehName.textContent = vehName;
+    if (e.fuel) {
+      e.fuel.textContent = G.player.vehicle ? ('Bensin ' + fuelPct + '%') : '—';
+      e.fuel.style.color = (G.player.vehicle && fuelPct < 18) ? '#ff5a4e' : '#f2ede2';
     }
+    if (e.fuelBar && G.player.vehicle) e.fuelBar.style.width = fuelPct + '%';
+    if (e.photoBanner) e.photoBanner.style.display = G.photoMode ? 'block' : 'none';
+    this.drawMinimap(G);
+  },
 
-    ctx.fillStyle = '#2f9e6e';
-    for (const p of pom) {
-      const [x, y] = ke(p.x, p.z);
-      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
-    }
-
-    if (penanda) {
-      const [x, y] = ke(penanda.x, penanda.z);
-      ctx.fillStyle = '#f2c94c';
-      ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
-    }
-
-    ctx.fillStyle = '#4d8dff';
-    for (const p of polisi) {
-      const [x, y] = ke(p.pos.x, p.pos.z);
-      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
-    }
-
-    const [x, y] = ke(pos.x, pos.z);
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(Math.atan2(Math.sin(heading), Math.cos(heading)) * -1 + Math.PI);
-    ctx.fillStyle = '#9fe3a0';
+  drawMinimap: function (G) {
+    var cv = this._els.minimap;
+    if (!cv) return;
+    var ctx = cv.getContext('2d');
+    var S = cv.width, C = S / 2, scale = S / 460;
+    ctx.clearRect(0, 0, S, S);
+    // Lingkaran dasar minimap
     ctx.beginPath();
-    ctx.moveTo(0, -7); ctx.lineTo(5, 6); ctx.lineTo(-5, 6);
-    ctx.closePath(); ctx.fill();
+    ctx.arc(C, C, C - 2, 0, Math.PI * 2);
+    ctx.fillStyle = '#101a26';
+    ctx.fill();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(C, C, C - 2, 0, Math.PI * 2);
+    ctx.clip();
+    // Jalan
+    ctx.strokeStyle = '#5d6b78';
+    ctx.lineWidth = 4;
+    KKWORLD.roadLines.forEach(function (c) {
+      var p = C + c * scale;
+      ctx.beginPath(); ctx.moveTo(p, 4); ctx.lineTo(p, S - 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(4, p); ctx.lineTo(S - 4, p); ctx.stroke();
+    });
+    // Laut di tepi
+    ctx.strokeStyle = '#1d6f8e';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(2, 2, S - 4, S - 4);
+    function dot(x, z, r, color) {
+      ctx.beginPath();
+      ctx.arc(C + x * scale, C + z * scale, r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+    // Mercusuar, pasar, SPBU, gudang
+    dot(KKWORLD.lighthouse.x, KKWORLD.lighthouse.z, 4, '#ffe9a8');
+    dot(KKWORLD.market.x, KKWORLD.market.z, 4, '#e8a33a');
+    dot(KKWORLD.stationNW.x, KKWORLD.stationNW.z, 3, '#d92323');
+    dot(KKWORLD.stationSE.x, KKWORLD.stationSE.z, 3, '#d92323');
+    dot(KKWORLD.warehouse.x, KKWORLD.warehouse.z, 4, '#b08a4a');
+    // Penanda misi
+    if (KKMISSIONS.markerMesh) {
+      dot(KKMISSIONS.markerMesh.position.x, KKMISSIONS.markerMesh.position.z, 6, '#e8c33a');
+      ctx.beginPath();
+      ctx.arc(C + KKMISSIONS.markerMesh.position.x * scale, C + KKMISSIONS.markerMesh.position.z * scale, 9, 0, Math.PI * 2);
+      ctx.strokeStyle = '#e8c33a';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    // Polisi
+    KKPOLICE.list.forEach(function (cop) {
+      dot(cop.mesh.position.x, cop.mesh.position.z, 3.5, '#2a6fd8');
+    });
+    // Pemain: panah emas di tengah
+    var px = C + G.player.pos.x * scale, pz = C + G.player.pos.z * scale;
+    ctx.save();
+    ctx.translate(px, pz);
+    ctx.rotate(-G.player.heading);
+    ctx.beginPath();
+    ctx.moveTo(0, -8); ctx.lineTo(6, 6); ctx.lineTo(-6, 6); ctx.closePath();
+    ctx.fillStyle = '#e8c33a';
+    ctx.fill();
     ctx.restore();
+    ctx.restore();
+    // Bingkai lingkaran
+    ctx.beginPath();
+    ctx.arc(C, C, C - 2, 0, Math.PI * 2);
+    ctx.strokeStyle = '#e8c33a';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  },
+
+  showPauseStats: function (G) {
+    var el = this._els.pauseStats;
+    if (!el) return;
+    var done = KKMISSIONS.index >= 7 ? 7 : KKMISSIONS.index;
+    el.textContent = 'Misi selesai ' + done + '/7  •  Uang $' + Math.floor(G.money) +
+      '  •  Skor ' + Math.floor(G.score) + '  •  Buronan ' + G.wanted +
+      ' bintang  •  Waktu ' + Math.floor(G.elapsed / 60) + ' mnt ' +
+      Math.floor(G.elapsed % 60) + ' dtk';
+  },
+
+  showEnd: function (G, won) {
+    var t = this._els.endTitle, l = this._els.endLine;
+    if (t) t.textContent = won ? 'KOTA KARANG TAKLUK!' : 'PERJALANAN BERAKHIR';
+    if (l) l.textContent = won
+      ? 'Semua 7 misi selesai. Skor ' + Math.floor(G.score) + ' • Uang $' + Math.floor(G.money)
+      : 'Kesehatan habis. Skor ' + Math.floor(G.score) + ' • Misi ' + KKMISSIONS.index + '/7 selesai';
   }
-}
+};

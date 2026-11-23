@@ -1,124 +1,139 @@
-// [RONDE 5] Pejalan kaki: berjalan di trotoar, menyeberang, menghindar mobil,
-// dan panik saat wanted naik. Empat tipe pejalan: pejalan biasa, pelari (jogger),
-// pejalan santai yang lambat, dan turis yang berhenti untuk memotret.
-// Saat hujan, semua pejalan mempercepat langkah mencari tempat berteduh.
-import { PEJALAN } from './config.js';
-import { acak } from './world_config.js';
+// pedestrians.js — pejalan kaki Kota Karang: warga, turis berkamera,
+// dan penjual pasar. Berjalan di trotoar, menghindar dari pemain,
+// dan berlari ke tempat berteduh saat hujan turun.
+var KKPEDESTRIANS = {
+  list: [],
 
-const T = window.THREE;
-const KULIT = [0xc98f6b, 0x8d5a3b, 0xe0b48f];
-const BAJU = [0x7f8c8d, 0xd35400, 0x16a085, 0x2c3e50, 0xf1c40f];
-// Laju dasar per tipe: biasa, pelari, santai, turis.
-const LAJU_TIPE = { biasa: [0.8, 1.6], pelari: [2.0, 2.6], santai: [0.45, 0.7], turis: [0.6, 1.0] };
-
-export class PejalanKaki {
-  constructor(scene, x, z) {
-    this.kelompok = new T.Group();
-    const kulit = new T.MeshLambertMaterial({ color: KULIT[Math.floor(acak(0, KULIT.length))] });
-    const baju = new T.MeshLambertMaterial({ color: BAJU[Math.floor(acak(0, BAJU.length))] });
-    const badan = new T.Mesh(new T.BoxGeometry(0.42, 0.6, 0.26), baju);
-    badan.position.y = 1.0;
-    const kepala = new T.Mesh(new T.SphereGeometry(0.18, 8, 6), kulit);
-    kepala.position.y = 1.5;
-    const kakiL = new T.Mesh(new T.BoxGeometry(0.16, 0.6, 0.18),
-      new T.MeshLambertMaterial({ color: 0x22262c }));
-    kakiL.position.set(-0.1, 0.3, 0);
-    const kakiR = kakiL.clone();
-    kakiR.position.x = 0.1;
-    this.kelompok.add(badan, kepala, kakiL, kakiR);
-    this.bagian = { kakiL, kakiR };
-    scene.add(this.kelompok);
-
-    this.pos = new T.Vector3(x, 0, z);
-    this.heading = acak(0, Math.PI * 2);
-    // Tipe pejalan menentukan laju dasar dan seberapa sering menyeberang.
-    const r = Math.random();
-    this.tipe = r < 0.5 ? 'biasa' : r < 0.7 ? 'pelari' : r < 0.85 ? 'santai' : 'turis';
-    const [lo, hi] = LAJU_TIPE[this.tipe];
-    this.laju = acak(lo, hi);
-    this.lajuDasar = [lo, hi];
-    this.fase = acak(0, 6);
-    this.panik = false;
-    this.menyeberang = false;
-    this.menunggu = acak(0, 2);
-    this.terhalang = false;
-    this.memotret = 0; // turis berhenti sejenak untuk memotret
-  }
-
-  lentur(dt, pemain, adaPanik, mobil = [], hujan = 0) {
-    if (adaPanik) this.panik = true;
-
-    this.terhalang = false;
-    for (const m of mobil) {
-      const dx = this.pos.x - m.pos.x, dz = this.pos.z - m.pos.z;
-      if (Math.hypot(dx, dz) < 7) {
-        const depan = Math.sin(m.heading) * dx + Math.cos(m.heading) * dz;
-        if (depan > 0) { this.terhalang = true; break; }
+  spawn: function (scene, rng, city) {
+    var shirts = [0xd94f3d, 0x3a6fd8, 0xe8a33a, 0x7fa88f, 0xe86aa8, 0xf2ede2, 0x5d6b7a];
+    for (var i = 0; i < KKCFG.pedCount; i++) {
+      var group = new THREE.Group();
+      var shirt = rng.pick(shirts);
+      var isTourist = rng.chance(0.3);
+      var torso = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.9, 0.42),
+        new THREE.MeshLambertMaterial({ color: shirt })
+      );
+      torso.position.y = 1.1;
+      group.add(torso);
+      var head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.46, 0.46, 0.46),
+        new THREE.MeshLambertMaterial({ color: rng.pick([0xd9a066, 0x8a5a38, 0xe8c49a]) })
+      );
+      head.position.y = 1.85;
+      group.add(head);
+      if (isTourist) {
+        // Topi dan kamera turis
+        var hat = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.42, 0.46, 0.16, 10),
+          new THREE.MeshLambertMaterial({ color: 0xe8dcc0 })
+        );
+        hat.position.y = 2.12;
+        group.add(hat);
+        var cam = new THREE.Mesh(
+          new THREE.BoxGeometry(0.3, 0.22, 0.16),
+          new THREE.MeshLambertMaterial({ color: 0x22262b })
+        );
+        cam.position.set(0, 1.35, 0.28);
+        group.add(cam);
       }
+      [-0.22, 0.22].forEach(function (x) {
+        var leg = new THREE.Mesh(
+          new THREE.BoxGeometry(0.3, 0.8, 0.3),
+          new THREE.MeshLambertMaterial({ color: 0x2c3440 })
+        );
+        leg.position.set(x, 0.4, 0);
+        group.add(leg);
+      });
+      var lx = rng.range(-150, 150), lz = rng.range(-150, 150);
+      group.position.set(lx, 0, lz);
+      scene.add(group);
+      this.list.push({
+        mesh: group,
+        heading: rng.range(0, Math.PI * 2),
+        speed: rng.range(1.0, 1.9),
+        tourist: isTourist,
+        fleeing: false,
+        alive: true,
+        pause: rng.range(0, 3),
+        shelterX: null,
+        shelterZ: null
+      });
     }
+  },
 
-    if (this.panik) {
-      const dx = this.pos.x - pemain.x, dz = this.pos.z - pemain.z;
-      const d = Math.hypot(dx, dz) || 1;
-      this.heading = Math.atan2(dx / d, dz / d);
-      this.laju = PEJALAN.lariPanik;
-      this.menyeberang = false;
-    } else if (this.terhalang) {
-      this.laju = 0;
-    } else if (this.memotret > 0) {
-      // Turis diam di tempat sambil memotret, lalu jalan lagi.
-      this.memotret -= dt;
-      this.laju = 0;
-    } else if (this.menyeberang) {
-      this.laju = 2.4;
-      this.menunggu -= dt;
-      if (this.menunggu <= 0) {
-        this.menyeberang = false;
-        this.heading = acak(0, Math.PI * 2);
+  update: function (G, dt) {
+    var px = G.player.pos.x, pz = G.player.pos.z;
+    for (var i = 0; i < this.list.length; i++) {
+      var ped = this.list[i];
+      if (!ped.alive) continue;
+      var dx = ped.mesh.position.x - px, dz = ped.mesh.position.z - pz;
+      var distP = Math.sqrt(dx * dx + dz * dz);
+      // Menghindar dari pemain / kendaraan yang mendekat
+      if (distP < 5) {
+        ped.heading = Math.atan2(-dx, -dz) + Math.PI;
+        ped.fleeing = true;
+      } else if (ped.fleeing && distP > 12) {
+        ped.fleeing = false;
       }
-    } else {
-      // Laju dasar mengikuti tipe pejalan; pelari jarang menyeberang.
-      const [lo, hi] = this.lajuDasar;
-      this.laju = acak(lo, hi);
-      // Hujan: semua pejalan mempercepat langkah mencari teduh.
-      if (hujan > 0.3) this.laju *= 1 + hujan;
-      // Turis kadang berhenti memotret; pelari jarang menyeberang.
-      if (this.tipe === 'turis' && Math.random() < 0.25 * dt) this.memotret = acak(1.5, 3.5);
-      const peluang = this.tipe === 'pelari' ? PEJALAN.peluangCross * 0.4 : PEJALAN.peluangCross;
-      if (Math.random() < peluang * dt * 0.4) {
-        this.menyeberang = true;
-        this.menunggu = acak(1.2, 2.4);
-        this.heading += Math.PI / 2;
+      var speed = ped.speed;
+      if (G.raining) {
+        // Turis dan warga berlari ke tempat berteduh saat hujan
+        if (ped.shelterX === null) {
+          ped.shelterX = KKWORLD.market.x + (Math.random() - 0.5) * 20;
+          ped.shelterZ = KKWORLD.market.z + (Math.random() - 0.5) * 20;
+        }
+        var sx = ped.shelterX - ped.mesh.position.x;
+        var sz = ped.shelterZ - ped.mesh.position.z;
+        var sd = Math.sqrt(sx * sx + sz * sz);
+        if (sd > 3) {
+          ped.heading = Math.atan2(-sx, -sz);
+          speed = 3.4;
+        } else {
+          speed = 0;
+        }
+      } else {
+        ped.shelterX = null;
+        ped.shelterZ = null;
+        if (ped.fleeing) speed = 3.6;
+        // Turis yang dekat dengan pemain berhenti sejenak dan memotret
+        if (ped.tourist && distP < 7 && !ped.fleeing) {
+          ped.pause = Math.max(ped.pause, 1.5);
+          ped.heading = Math.atan2(-dx, -dz);
+          speed = 0;
+        }
+        // Berhenti sejenak sesekali, lalu ganti arah
+        ped.pause -= dt;
+        if (ped.pause <= 0) {
+          ped.pause = 2 + Math.random() * 4;
+          if (Math.random() < 0.5) ped.heading += (Math.random() - 0.5) * 2.2;
+        }
       }
+      var nx = ped.mesh.position.x - Math.sin(ped.heading) * speed * dt;
+      var nz = ped.mesh.position.z - Math.cos(ped.heading) * speed * dt;
+      if (!cityCollides(G.city, nx, nz, 0.6) && Math.abs(nx) < 195 && Math.abs(nz) < 195) {
+        ped.mesh.position.x = nx;
+        ped.mesh.position.z = nz;
+      } else {
+        ped.heading += Math.PI / 2;
+      }
+      ped.mesh.rotation.y = ped.heading;
+      // Goyang langkah
+      ped.mesh.position.y = speed > 0.2 ? Math.abs(Math.sin(performance.now() * 0.01 + i)) * 0.05 : 0;
     }
+  },
 
-    this.pos.x += Math.sin(this.heading) * this.laju * dt;
-    this.pos.z += Math.cos(this.heading) * this.laju * dt;
-    // Mencapai tepi kota: muncul lagi di sisi berlawanan supaya kota terasa hidup.
-    if (this.pos.x > 220) this.pos.x = -220;
-    else if (this.pos.x < -220) this.pos.x = 220;
-    if (this.pos.z > 220) this.pos.z = -220;
-    else if (this.pos.z < -220) this.pos.z = 220;
-    this.fase += this.laju * dt * 2;
-    this.kelompok.position.copy(this.pos);
-    this.kelompok.rotation.y = this.heading;
-    const s = Math.sin(this.fase);
-    this.bagian.kakiL.rotation.x = s * 0.6;
-    this.bagian.kakiR.rotation.x = -s * 0.6;
+  nearestInLine: function (G, x, z, fx, fz, maxDist) {
+    var best = null, bestD = maxDist;
+    for (var i = 0; i < this.list.length; i++) {
+      var p = this.list[i];
+      if (!p.alive) continue;
+      var dx = p.mesh.position.x - x, dz = p.mesh.position.z - z;
+      var along = dx * fx + dz * fz;
+      if (along < 0 || along > bestD) continue;
+      var side = Math.abs(dx * fz - dz * fx);
+      if (side < 1.6) { bestD = along; best = p; }
+    }
+    return best;
   }
-}
-
-/** Sebar pejalan kaki di sepanjang trotoar. */
-export function buatPejalan(scene, setengah, jumlah = PEJALAN.jumlah) {
-  const daftar = [];
-  for (let i = 0; i < jumlah; i++) {
-    const vertikal = Math.random() < 0.5;
-    const diJalan = -setengah + Math.floor(acak(0, 10)) * 44 + 6;
-    const sepanjang = acak(-setengah, setengah);
-    const lajur = (Math.random() < 0.5 ? -1 : 1) * (6 + acak(0, 3));
-    const x = vertikal ? diJalan + lajur : sepanjang;
-    const z = vertikal ? sepanjang : diJalan + lajur;
-    daftar.push(new PejalanKaki(scene, x, z));
-  }
-  return daftar;
-}
+};

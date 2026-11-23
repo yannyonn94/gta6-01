@@ -1,166 +1,148 @@
-// [RONDE 5] Kendaraan: mobil parkir yang bisa dicuri, motor, van logistik,
-// dan armada lalu lintas.
-import { LALU, MOTOR, VAN } from './config.js';
-import { batas, acak } from './world_config.js';
-import { Tangki } from './fuel.js';
-
-const T = window.THREE;
-const WARNA = [0xc0392b, 0x2980b9, 0x27ae60, 0xf39c12, 0x8e44ad, 0xbdc3c7, 0x2c3e50];
-
-export class Mobil {
-  constructor(scene, warna = 0xc0392b) {
-    this.kelompok = new T.Group();
-    const bodiMat = new T.MeshLambertMaterial({ color: warna });
-    const kacaMat = new T.MeshLambertMaterial({ color: 0x1d2a35 });
-    const banMat = new T.MeshLambertMaterial({ color: 0x14161a });
-
-    const bodi = new T.Mesh(new T.BoxGeometry(1.9, 0.55, 4.2), bodiMat);
-    bodi.position.y = 0.55;
-    const kabin = new T.Mesh(new T.BoxGeometry(1.7, 0.5, 2.1), kacaMat);
-    kabin.position.set(0, 1.05, -0.1);
-    this.kelompok.add(bodi, kabin);
-
-    const geoRoda = new T.CylinderGeometry(0.36, 0.36, 0.3, 10);
-    this.roda = [];
-    for (const [x, z] of [[-0.95, 1.35], [0.95, 1.35], [-0.95, -1.35], [0.95, -1.35]]) {
-      const r = new T.Mesh(geoRoda, banMat);
-      r.rotation.z = Math.PI / 2;
-      r.position.set(x, 0.36, z);
-      this.kelompok.add(r);
-      this.roda.push(r);
-    }
-    scene.add(this.kelompok);
-
-    this.mesh = this.kelompok;
-    this.pos = new T.Vector3();
-    this.heading = 0;
-    this.laju = 0;
-    this.pengemudi = null;   // 'lalu' | 'pemain' | null
-    this.nama = 'Mobil';
-    this.tangki = new Tangki();
-    // Variasi laju tiap mobil supaya lalu lintas tidak seragam.
-    this.variasi = 1;
+// vehicles.js — kendaraan Kota Karang: mobil lalu lintas, mobil pemain,
+// sepeda motor, dan van logistik. Setiap kendaraan punya tangki bahan bakar
+// dan bergerak di jalan; lalu lintas mengikuti garis jalan kota.
+function makeVehicleMesh(kind, color) {
+  var group = new THREE.Group();
+  var bodyColor = color;
+  var bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
+  var darkMat = new THREE.MeshLambertMaterial({ color: 0x22262b });
+  var glassMat = new THREE.MeshLambertMaterial({ color: 0x9fc4d8 });
+  var bodyLen = kind === 'van' ? 5.6 : (kind === 'moto' ? 2.2 : 4.4);
+  var bodyWid = kind === 'moto' ? 0.9 : 2.0;
+  var bodyH = kind === 'van' ? 2.2 : 0.85;
+  var body = new THREE.Mesh(new THREE.BoxGeometry(bodyWid, bodyH, bodyLen), bodyMat);
+  body.position.y = kind === 'van' ? 1.5 : 0.85;
+  group.add(body);
+  if (kind !== 'moto') {
+    var cabin = new THREE.Mesh(new THREE.BoxGeometry(bodyWid - 0.3, 0.75, kind === 'van' ? 2.2 : 2.0), glassMat);
+    cabin.position.set(0, bodyH + 0.75, kind === 'van' ? 0.6 : -0.2);
+    group.add(cabin);
+  } else {
+    var seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 1.1), darkMat);
+    seat.position.y = 1.0;
+    group.add(seat);
+    var bar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.9), darkMat);
+    bar.rotation.z = Math.PI / 2;
+    bar.position.set(0, 1.25, 0.9);
+    group.add(bar);
   }
-
-  gerak(dt) {
-    if (this.pengemudi === 'lalu') {
-      this.laju += (LALU.laju * this.variasi - this.laju) * Math.min(1, dt * 0.8);
-      this.pos.x += Math.sin(this.heading) * this.laju * dt;
-      this.pos.z += Math.cos(this.heading) * this.laju * dt;
-      this.kelompok.position.copy(this.pos);
-      this.kelompok.rotation.y = this.heading;
-      this.tangki.pakai(this.laju * dt);
-    }
-    for (const r of this.roda) r.rotation.x += this.laju * dt * 2.2;
-  }
+  // Roda
+  var wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.32, 10);
+  wheelGeo.rotateZ(Math.PI / 2);
+  var wheelPos = kind === 'moto'
+    ? [[0, 0.42, 0.85], [0, 0.42, -0.85]]
+    : [[-0.95, 0.42, 1.35], [0.95, 0.42, 1.35], [-0.95, 0.42, -1.35], [0.95, 0.42, -1.35]];
+  wheelPos.forEach(function (p) {
+    var w = new THREE.Mesh(wheelGeo, darkMat);
+    w.position.set(p[0], p[1], p[2]);
+    group.add(w);
+  });
+  // Lampu depan dan belakang
+  var headMat = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });
+  [-0.6, 0.6].forEach(function (x) {
+    var h = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.1), headMat);
+    h.position.set(x, 0.95, -bodyLen / 2 - 0.02);
+    group.add(h);
+  });
+  var tailMat = new THREE.MeshBasicMaterial({ color: 0xd92323 });
+  [-0.6, 0.6].forEach(function (x) {
+    var t = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.1), tailMat);
+    t.position.set(x, 0.95, bodyLen / 2 + 0.02);
+    group.add(t);
+  });
+  return group;
 }
 
-/** Armada yang berputar-putar di jalan, termasuk satu motor. */
-export function buatLaluLintas(scene, jalan, jumlah = LALU.jumlah) {
-  const armada = [];
-  for (let i = 0; i < jumlah; i++) {
-    const m = new Mobil(scene, WARNA[i % WARNA.length]);
-    m.nama = ['Sedan', 'Coupe', 'Station', 'Pickup'][i % 4];
-    m.variasi = acak(0.85, 1.15);
-    const j = jalan[i % jalan.length];
-    const sepanjang = acak(-j.setengah, j.setengah);
-    const lajur = (i % 2 ? 1 : -1) * 2.6;
-    if (j.vertikal) {
-      m.pos.set(j.di + lajur, 0, sepanjang);
-      m.heading = i % 4 < 2 ? 0 : Math.PI;
-    } else {
-      m.pos.set(sepanjang, 0, j.di + lajur);
-      m.heading = i % 4 < 2 ? Math.PI / 2 : -Math.PI / 2;
+var KKVEHICLES = {
+  list: [],
+  traffic: [],
+  // Palet warna mobil lalu lintas kota
+  trafficColors: [0xc23b2e, 0xe8e2d2, 0x3a6fd8, 0xe8a33a, 0x5d6b7a, 0x7fa88f, 0xd97b5f],
+
+  spawnTraffic: function (scene, rng, city) {
+    var colors = this.trafficColors;
+    for (var i = 0; i < KKCFG.trafficCount; i++) {
+      var kind = rng.chance(0.85) ? 'car' : 'van';
+      var v = this.create(scene, kind, rng.pick(colors), rng);
+      // Letakkan di garis jalan acak, menghadap sepanjang jalan
+      var alongX = rng.chance(0.5);
+      var line = rng.pick(KKWORLD.roadLines);
+      var other = rng.range(-150, 150);
+      v.mesh.position.set(alongX ? line + 2 : other, 0, alongX ? other : line + 2);
+      v.heading = alongX ? (rng.chance(0.5) ? 0 : Math.PI) : (rng.chance(0.5) ? Math.PI / 2 : -Math.PI / 2);
+      v.speed = rng.range(7, 12);
+      v.isTraffic = true;
+      v.driver = 'traffic';
+      this.traffic.push(v);
+      this.list.push(v);
     }
-    m.pengemudi = 'lalu';
-    m.kelompok.position.copy(m.pos);
-    m.kelompok.rotation.y = m.heading;
-    armada.push(m);
-  }
-  // Satu motor parkir di tepi jalan: lebih cepat dan lincah dari mobil.
-  const motor = new Motor(scene, 0xe67e22);
-  motor.nama = 'Motor';
-  const j0 = jalan[3];
-  motor.pos.set(j0.di + 2.6, 0, 30);
-  motor.heading = 0;
-  motor.kelompok.position.copy(motor.pos);
-  motor.kelompok.rotation.y = motor.heading;
-  armada.push(motor);
-  // Satu van logistik parkir di dekat pasar: lambat, stabil, tangki besar.
-  const van = new Van(scene, 0x7f8c8d);
-  van.nama = 'Van Logistik';
-  const j1 = jalan[7];
-  van.pos.set(j1.di - 2.6, 0, 44);
-  van.heading = Math.PI / 2;
-  van.kelompok.position.copy(van.pos);
-  van.kelompok.rotation.y = van.heading;
-  armada.push(van);
-  return armada;
-}
+  },
 
-/** Motor: dua roda, badan ramping, top speed dan akselerasi di atas mobil. */
-export class Motor extends Mobil {
-  constructor(scene, warna = 0xe67e22) {
-    super(scene, warna);
-    // Ganti bodi mobil dengan rangka motor yang ramping.
-    this.kelompok.clear();
-    const bodiMat = new T.MeshLambertMaterial({ color: warna });
-    const gelapMat = new T.MeshLambertMaterial({ color: 0x1d2a35 });
-    const banMat = new T.MeshLambertMaterial({ color: 0x14161a });
-    const rangka = new T.Mesh(new T.BoxGeometry(0.5, 0.35, 2.0), bodiMat);
-    rangka.position.y = 0.75;
-    const jok = new T.Mesh(new T.BoxGeometry(0.45, 0.18, 0.9), gelapMat);
-    jok.position.set(0, 0.95, -0.35);
-    const setang = new T.Mesh(new T.BoxGeometry(0.7, 0.08, 0.08), gelapMat);
-    setang.position.set(0, 1.05, 0.85);
-    this.kelompok.add(rangka, jok, setang);
-    const geoRoda = new T.CylinderGeometry(0.34, 0.34, 0.18, 10);
-    this.roda = [];
-    for (const z of [0.85, -0.85]) {
-      const r = new T.Mesh(geoRoda, banMat);
-      r.rotation.z = Math.PI / 2;
-      r.position.set(0, 0.34, z);
-      this.kelompok.add(r);
-      this.roda.push(r);
+  create: function (scene, kind, color, rng) {
+    var tank = kind === 'van' ? KKCFG.vanTank : (kind === 'moto' ? KKCFG.motoTank : KKCFG.carTank);
+    var v = {
+      kind: kind,
+      color: color,
+      mesh: makeVehicleMesh(kind, color),
+      heading: 0,
+      speed: 0,
+      fuel: tank * (0.6 + (rng ? rng.next() * 0.4 : 0.4)),
+      tank: tank,
+      isTraffic: false,
+      driver: null,
+      name: kind === 'van' ? 'Van Logistik' : (kind === 'moto' ? 'Motor Karang' : 'Mobil'),
+      steer: 0
+    };
+    scene.add(v.mesh);
+    return v;
+  },
+
+  // Kendaraan terdekat yang bisa dinaiki pemain.
+  nearestDrivable: function (x, z, maxDist) {
+    var best = null, bestD = maxDist;
+    for (var i = 0; i < this.list.length; i++) {
+      var v = this.list[i];
+      if (v.driver === 'traffic') continue;
+      var dx = v.mesh.position.x - x, dz = v.mesh.position.z - z;
+      var d = Math.sqrt(dx * dx + dz * dz);
+      if (d < bestD) { bestD = d; best = v; }
     }
-    this.motor = true;
-  }
+    return best;
+  },
 
-  /** Motor memakai top speed dan akselerasi sendiri saat dikemudi pemain. */
-  get top() { return MOTOR.top; }
-  get akselerasi() { return MOTOR.akselerasi; }
-}
-
-/** Van logistik: bodi kotak tinggi, lambat tapi stabil, tangki besar. */
-export class Van extends Mobil {
-  constructor(scene, warna = 0x7f8c8d) {
-    super(scene, warna);
-    this.kelompok.clear();
-    const bodiMat = new T.MeshLambertMaterial({ color: warna });
-    const gelapMat = new T.MeshLambertMaterial({ color: 0x1d2a35 });
-    const banMat = new T.MeshLambertMaterial({ color: 0x14161a });
-    const kabin = new T.Mesh(new T.BoxGeometry(1.9, 0.9, 1.4), bodiMat);
-    kabin.position.set(0, 0.85, 1.5);
-    const kaca = new T.Mesh(new T.BoxGeometry(1.7, 0.5, 0.2), gelapMat);
-    kaca.position.set(0, 1.0, 2.2);
-    const bak = new T.Mesh(new T.BoxGeometry(2.0, 1.7, 3.0), bodiMat);
-    bak.position.set(0, 1.25, -0.9);
-    this.kelompok.add(kabin, kaca, bak);
-    const geoRoda = new T.CylinderGeometry(0.4, 0.4, 0.32, 10);
-    this.roda = [];
-    for (const [x, z] of [[-1.0, 1.5], [1.0, 1.5], [-1.0, -1.6], [1.0, -1.6]]) {
-      const r = new T.Mesh(geoRoda, banMat);
-      r.rotation.z = Math.PI / 2;
-      r.position.set(x, 0.4, z);
-      this.kelompok.add(r);
-      this.roda.push(r);
+  update: function (G, dt) {
+    var slip = G.raining ? KKCFG.rainSlipAccel : 1;
+    for (var i = 0; i < this.traffic.length; i++) {
+      var v = this.traffic[i];
+      var mx = v.mesh.position.x, mz = v.mesh.position.z;
+      // Lalu lintas melaju lurus di jalannya, berbelok di ujung kota.
+      var fx = -Math.sin(v.heading), fz = -Math.cos(v.heading);
+      var nx = mx + fx * v.speed * dt * slip;
+      var nz = mz + fz * v.speed * dt * slip;
+      if (Math.abs(nx) > 168 || Math.abs(nz) > 168) {
+        v.heading += Math.PI / 2; // belok di perempatan ujung
+        nx = mx; nz = mz;
+      }
+      // Pelan bila ada kendaraan lain tepat di depan
+      for (var j = 0; j < this.traffic.length; j++) {
+        if (i === j) continue;
+        var o = this.traffic[j];
+        var dx = o.mesh.position.x - nx, dz = o.mesh.position.z - nz;
+        if (dx * dx + dz * dz < 30 && (dx * fx + dz * fz) > 0) {
+          nx = mx; nz = mz;
+          break;
+        }
+      }
+      v.mesh.position.x = nx;
+      v.mesh.position.z = nz;
+      v.mesh.rotation.y = v.heading;
     }
-    this.van = true;
-    this.tangki = new Tangki(VAN.tangki);
+    // Kendaraan pemain: geser mesh mengikuti state pemain
+    if (G.player && G.player.vehicle) {
+      var pv = G.player.vehicle;
+      pv.mesh.position.x = G.player.pos.x;
+      pv.mesh.position.z = G.player.pos.z;
+      pv.mesh.rotation.y = G.player.heading;
+    }
   }
-
-  /** Van memakai top speed, akselerasi, dan belok sendiri. */
-  get top() { return VAN.top; }
-  get akselerasi() { return VAN.akselerasi; }
-  get belok() { return VAN.belok; }
-}
+};

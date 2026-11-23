@@ -1,90 +1,48 @@
-// [RONDE 5] Bahan bakar mobil dan pom bensin.
-// Mobil punya tangki; bahan bakar turun saat menempuh jarak. Dua pom bensin
-// (barat-laut dan tenggara) mengisi ulang perlahan selama mobil berhenti di atasnya.
-// Tangki bisa dibuat lebih besar (misalnya van logistik).
-import { BAHAN, WARNA } from './config.js';
-import { batas } from './world_config.js';
+// fuel.js — model tangki bahan bakar: terkuras saat berkendara,
+// diisi ulang di SPBU, dan memberi peringatan saat menipis.
+var KKFUEL = {
+  // Kurangi bahan bakar sebanding dengan beban mesin (0 diam .. 1 gas penuh).
+  drain: function (vehicle, load, dt) {
+    if (!vehicle) return;
+    var use = (KKCFG.fuelUseIdle + load * KKCFG.fuelUseFull) * dt;
+    vehicle.fuel = Math.max(0, vehicle.fuel - use);
+  },
 
-export class Tangki {
-  constructor(kapasitas = BAHAN.kapasitas) {
-    this.kapasitas = kapasitas;
-    this.isi = kapasitas;
+  // Apakah kendaraan berada di area SPBU?
+  nearStation: function (G, x, z) {
+    for (var i = 0; i < G.city.stations.length; i++) {
+      var st = G.city.stations[i];
+      var dx = x - st.x, dz = z - st.z;
+      if (dx * dx + dz * dz < 14 * 14) return st;
+    }
+    return null;
+  },
+
+  // Isi ulang saat kendaraan pemain berhenti di area SPBU.
+  // Biaya $0,50 per liter, dipotong langsung dari uang pemain.
+  refuelTick: function (G, dt) {
+    var p = G.player;
+    if (!p.vehicle) return false;
+    var st = this.nearStation(G, p.pos.x, p.pos.z);
+    if (!st) return false;
+    var v = p.vehicle;
+    if (v.fuel >= v.tank) return false;
+    var before = v.fuel;
+    v.fuel = Math.min(v.tank, v.fuel + KKCFG.refuelRate * dt);
+    var liters = v.fuel - before;
+    G.money = Math.max(0, G.money - liters * 0.5);
+    if (v.fuel >= v.tank && before < v.tank) {
+      KKHUD.toast('Tangki penuh! Total isi bensin dipotong dari uangmu.');
+    }
+    return true;
+  },
+
+  percent: function (vehicle) {
+    if (!vehicle) return 0;
+    return Math.round((vehicle.fuel / vehicle.tank) * 100);
+  },
+
+  isLow: function (vehicle) {
+    return vehicle && vehicle.fuel < KKCFG.fuelLowWarn;
   }
-
-  pakai(jarak) {
-    this.isi = batas(this.isi - jarak * BAHAN.pakai, 0, this.kapasitas);
-  }
-
-  isiUlang(dt) {
-    this.isi = batas(this.isi + BAHAN.isi * dt, 0, this.kapasitas);
-  }
-
-  get kosong() { return this.isi <= 0.5; }
-  get rendah() { return this.isi <= BAHAN.rendah; }
-  get penuh() { return this.isi >= this.kapasitas - 0.5; }
-  /** Isi sebagai persen kapasitas, dipakai HUD. */
-  get persen() { return Math.round((this.isi / this.kapasitas) * 100); }
-  get teks() { return `${this.persen}%`; }
-  /** Perkiraan jarak tempuh tersisa (meter) dengan pemakaian saat ini. */
-  sisaJarak() { return Math.round(this.isi / BAHAN.pakai); }
-}
-
-/** Pom bensin terdekat dari (x, z) beserta jaraknya. */
-export function stasiunTerdekat(x, z, daftar) {
-  let terbaik = null, jarakTerbaik = Infinity;
-  for (const p of daftar) {
-    const d = Math.hypot(p.x - x, p.z - z);
-    if (d < jarakTerbaik) { jarakTerbaik = d; terbaik = p; }
-  }
-  return { stasiun: terbaik, jarak: jarakTerbaik };
-}
-
-/** Bangun satu pom bensin di (x, z): tiang, atap, dan dua pompa. */
-function bangunSatuPom(scene, T, x, z) {
-  const lampak = new T.Mesh(
-    new T.PlaneGeometry(34, 34),
-    new T.MeshLambertMaterial({ color: 0x30363f }),
-  );
-  lampak.rotation.x = -Math.PI / 2;
-  lampak.position.set(x, 0.03, z);
-  scene.add(lampak);
-
-  const atap = new T.Mesh(
-    new T.BoxGeometry(22, 0.6, 14),
-    new T.MeshLambertMaterial({ color: 0xc0392b }),
-  );
-  atap.position.set(x, 5.4, z);
-  scene.add(atap);
-
-  const tiangMat = new T.MeshLambertMaterial({ color: 0x6b7280 });
-  for (const [ox, oz] of [[-9, -5], [9, -5], [-9, 5], [9, 5]]) {
-    const tiang = new T.Mesh(new T.CylinderGeometry(0.3, 0.3, 5.4, 8), tiangMat);
-    tiang.position.set(x + ox, 2.7, z + oz);
-    scene.add(tiang);
-  }
-
-  const pompaMat = new T.MeshLambertMaterial({ color: WARNA.bensin });
-  for (const ox of [-3, 3]) {
-    const pompa = new T.Mesh(new T.BoxGeometry(1.1, 2.0, 0.8), pompaMat);
-    pompa.position.set(x + ox, 1.0, z);
-    scene.add(pompa);
-  }
-
-  // Papan nama pom: kotak hijau terang supaya mudah ditemukan dari jauh.
-  const papan = new T.Mesh(
-    new T.BoxGeometry(6, 1.4, 0.4),
-    new T.MeshBasicMaterial({ color: WARNA.bensin }),
-  );
-  papan.position.set(x, 6.6, z);
-  scene.add(papan);
-}
-
-/** Bangun dua pom bensin dan kembalikan posisinya. */
-export function buatPomBensin(scene, T, half) {
-  const posisi = [
-    { x: -half + 60, z: -half + 60 },
-    { x: half - 60, z: half - 60 },
-  ];
-  for (const p of posisi) bangunSatuPom(scene, T, p.x, p.z);
-  return posisi.map((p) => ({ x: p.x, z: p.z, radius: 16 }));
-}
+};

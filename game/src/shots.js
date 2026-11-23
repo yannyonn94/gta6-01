@@ -1,167 +1,162 @@
-// [RONDE 5] Mode shot: membaca ?shot=...&seed=N&hour=H dan menata scene.
-// Mode: start, play, chase, drive, koin, hujan, end.
-export function bacaQueryShot() {
-  const q = new URLSearchParams(window.location.search);
-  const hour = q.get('hour');
-  return {
-    shot: q.get('shot') ?? '',
-    seed: Number(q.get('seed') ?? '1') || 1,
-    hour: hour === null ? null : Number(hour),
-  };
-}
+// shots.js — staging screenshot dari parameter URL.
+// Contoh: game/index.html?shot=chase&seed=7&hour=17
+// Nama shot: start, play, chase, drive, koin, hujan, foto, end.
+// Saat shot di-stage: overlay awal disembunyikan, HUD ditampilkan,
+// jam diatur, pemain/kamera/kendaraan/polisi diposisikan untuk adegan itu.
+var KKSHOTS = {
+  params: function () {
+    var q = new URLSearchParams(window.location.search);
+    return {
+      shot: q.get('shot') || '',
+      seed: parseInt(q.get('seed'), 10) || 20261123,
+      hour: parseFloat(q.get('hour')) || 11
+    };
+  },
 
-export function tataShot(nama, ctx) {
-  const { pemain, kamera, lalu, polisi, pejalan, setengahKota, hud, overlay, siklus } = ctx;
-  if (overlay && nama) overlay.classList.add('hidden');
+  isStaging: function () {
+    return !!this.params().shot;
+  },
 
-  const aturJam = (h) => { if (siklus) siklus.aturJam(h); };
+  // Posisikan pemain + kendaraan + polisi untuk adegan tertentu.
+  // Dipanggil game_main setelah dunia dan misi siap.
+  apply: function (G, shot) {
+    var W = KKWORLD;
+    var p = G.player;
+    function placeVehicle(kind, color, x, z, heading) {
+      var v = KKVEHICLES.create(G.scene, kind, color, null);
+      v.mesh.position.set(x, 0, z);
+      v.heading = heading;
+      v.mesh.rotation.y = heading;
+      v.fuel = v.tank;
+      KKVEHICLES.list.push(v);
+      return v;
+    }
+    function placeCop(x, z, heading) {
+      var c = KKPOLICE.makeCruiser(G.scene);
+      c.group.position.set(x, 0, z);
+      c.group.rotation.y = heading;
+      G.scene.add(c.group);
+      var cop = { mesh: c.group, blue: c.blue, red: c.red, heading: heading, speed: 14, stunned: 0, flash: Math.random() * 9 };
+      KKPOLICE.list.push(cop);
+      return cop;
+    }
+    function putPlayer(x, z, heading) {
+      p.pos.set(x, 0, z);
+      p.heading = heading;
+      p.mesh.position.copy(p.pos);
+      p.mesh.rotation.y = heading;
+      p.mesh.visible = true;
+    }
+    function putPlayerIn(v) {
+      p.vehicle = v;
+      p.onFoot = false;
+      v.driver = 'player';
+      p.pos.set(v.mesh.position.x, 0, v.mesh.position.z);
+      p.heading = v.heading;
+      p.mesh.visible = false;
+    }
 
-  switch (nama) {
-    case 'start':
-      aturJam(11);
-      kamera.position.set(0, 150, 230);
-      kamera.lookAt(0, 0, 0);
-      if (hud) {
-        hud.tampil(true);
-        hud.aturJam(siklus ? siklus.teksJam() : '11:00', false);
-      }
-      return 'start';
-    case 'play': {
-      aturJam(10);
-      pemain.pos.set(6, 0, 40);
-      pemain.kelompok.position.copy(pemain.pos);
-      pemain.kelompok.rotation.y = Math.PI * 0.15;
-      pemain.laju = 5.2;
-      pemain.faseJalan = 1.2;
-      pemain.animasi();
-      kamera.position.set(7.6, 2.8, 34.2);
-      kamera.lookAt(6.4, 1.6, 46);
-      if (hud) {
-        hud.tampil(true);
-        hud.aturObjektif('Misi 1/7 · Kereta Mati — Ambil mobil biru di garasi dan bawa ke dermaga. (42 m)');
-        hud.aturJam(siklus ? siklus.teksJam() : '10:00', false);
-      }
-      return 'play';
+    if (shot === 'start') {
+      // Pandangan udara kota di siang hari
+      putPlayer(-40, 40, Math.PI * 0.75);
+      G.cameraMode = 'aerial';
+      G.aerialTarget = { x: 0, z: 0 };
+      KKDAY.setHour(11);
+      KKMISSIONS.index = 0;
+      KKMISSIONS.state = 'active';
+    } else if (shot === 'play') {
+      // Jalan kaki di jalan utama dekat pasar, misi 1 berjalan, koin terlihat.
+      // Pemain berdiri di jalan terbuka (garis x=32) menghadap barat ke arah
+      // kios pasar, supaya atap kios tidak menutupi kamera di belakangnya.
+      putPlayer(32, 96, Math.PI / 2);
+      KKMISSIONS.index = 0;
+      KKMISSIONS.state = 'active';
+      KKMISSIONS.setupMission(G);
+      var coin = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.7, 0.7, 0.2, 18),
+        new THREE.MeshLambertMaterial({ color: 0xf2c230, emissive: 0x664400 })
+      );
+      // Cakram menghadap kamera (sumbu X), supaya koin emas terbaca jelas
+      coin.rotation.z = Math.PI / 2;
+      coin.userData.fixedShot = true;
+      coin.position.set(18, 1.2, 92);
+      G.scene.add(coin);
+      KKMISSIONS.coinMeshes.push(coin);
+      var car = placeVehicle('car', 0xd97b5f, 28, 78, Math.PI);
+      car.stolen = true;
+      // Pejalan kaki di dekat pasar supaya jalan terasa hidup
+      KKDAY.setHour(11);
+      G.cameraMode = 'follow';
+    } else if (shot === 'chase') {
+      // Tiga mobil polisi mengejar di sore hari, buronan 3 bintang.
+      // Polisi mengepung dari samping dan belakang mobil pemain.
+      var chaseCar = placeVehicle('car', 0xc23b2e, 0, -20, Math.PI);
+      putPlayerIn(chaseCar);
+      G.wanted = 3;
+      G.lastCrimeAt = G.elapsed;
+      placeCop(7, -2, Math.PI);
+      placeCop(-8, 6, Math.PI);
+      placeCop(2, 16, Math.PI);
+      KKDAY.setHour(17);
+      KKDAY.setRain(false, 0);
+      G.cameraMode = 'follow';
+      KKMISSIONS.index = 2;
+      KKMISSIONS.state = 'active';
+    } else if (shot === 'drive') {
+      // Van logistik menembus hujan deras di jalan barat, buronan 3,
+      // roadblock menutup jalan tepat di depan van.
+      var van = placeVehicle('van', 0xe8e2d2, -96, 64, Math.PI / 2);
+      putPlayerIn(van);
+      G.wanted = 3;
+      G.lastCrimeAt = G.elapsed;
+      KKMISSIONS.index = 6;
+      KKMISSIONS.state = 'active';
+      KKMISSIONS.setupMission(G);
+      KKDAY.setHour(16);
+      KKDAY.setRain(true, 1);
+      // Roadblock di depan van, melintang di jalan z=64
+      var rb1 = placeCop(-136, 58, Math.PI / 2);
+      var rb2 = placeCop(-136, 70, Math.PI / 2);
+      rb1.mesh.rotation.y = Math.PI;
+      rb2.mesh.rotation.y = Math.PI;
+      placeCop(-112, 56, Math.PI / 2);
+      G.cameraMode = 'follow';
+    } else if (shot === 'koin') {
+      putPlayer(W.market.x + 10, W.market.z - 4, Math.PI);
+      KKMISSIONS.index = 5;
+      KKMISSIONS.state = 'active';
+      KKMISSIONS.setupMission(G);
+      KKDAY.setHour(10);
+      G.cameraMode = 'follow';
+    } else if (shot === 'hujan') {
+      putPlayer(-32, 96, Math.PI / 2);
+      KKDAY.setHour(15);
+      KKDAY.setRain(true, 0.8);
+      KKMISSIONS.index = 1;
+      KKMISSIONS.state = 'active';
+      KKMISSIONS.setupMission(G);
+      G.cameraMode = 'follow';
+    } else if (shot === 'foto') {
+      putPlayer(120, -120, Math.PI * 0.25);
+      KKDAY.setHour(18);
+      G.photoMode = true;
+      G.cameraMode = 'follow';
+    } else if (shot === 'end') {
+      putPlayer(0, 0, Math.PI);
+      KKMISSIONS.index = 7;
+      KKMISSIONS.state = 'done';
+      G.gameWon = true;
+      KKDAY.setHour(12);
+      G.cameraMode = 'follow';
+    } else {
+      G.cameraMode = 'follow';
     }
-    case 'chase': {
-      aturJam(16.0);
-      const cx = 6, cz = -20;
-      pemain.pos.set(cx, 0, cz);
-      pemain.kelompok.position.copy(pemain.pos);
-      pemain.kelompok.rotation.y = Math.PI;
-      polisi.forEach((p, i) => {
-        p.kelompok.visible = true;
-        p.pos.set(cx + (i - 2) * 3.4, 0, cz - 9 - i * 5);
-        p.kelompok.position.copy(p.pos);
-        p.heading = Math.PI;
-        p.laju = 8;
-      });
-      kamera.position.set(cx + 1.8, 3.0, cz + 7.5);
-      kamera.lookAt(cx, 1.4, cz - 12);
-      if (hud) {
-        hud.tampil(true);
-        hud.aturWanted(3);
-        hud.aturObjektif('Misi 3/7 · Hilang Sejenak — Polisi sudah tahu. Turunkan bintang wanted kamu.');
-        hud.aturJam(siklus ? siklus.teksJam() : '17:18', false);
-      }
-      return 'chase';
-    }
-    case 'drive': {
-      aturJam(16.5);
-      const m = lalu[0];
-      pemain.masukMobil(m);
-      m.pengemudi = 'pemain';
-      m.pos.set(6, 0, -60);
-      m.heading = 0;
-      m.laju = 12;
-      m.kelompok.position.copy(m.pos);
-      kamera.position.set(6, 4.0, -68);
-      kamera.lookAt(6, 0.9, -50);
-      if (hud) {
-        hud.tampil(true);
-        hud.aturObjektif('Misi 4/7 · Sprint Pantai — Tempuh 420 meter sebelum waktu habis.');
-        hud.aturJam(siklus ? siklus.teksJam() : '17:18', false);
-        hud.aturLaju(m.laju, true);
-        hud.aturMobil(m.nama);
-        hud.aturBahan(m.tangki.teks, false);
-      }
-      return 'drive';
-    }
-    case 'koin': {
-      aturJam(10.5);
-      pemain.pos.set(-140, 0, -132);
-      pemain.kelompok.position.copy(pemain.pos);
-      pemain.kelompok.rotation.y = Math.PI * 0.3;
-      pemain.laju = 5.2;
-      pemain.faseJalan = 0.8;
-      pemain.animasi();
-      kamera.position.set(-138, 3.2, -124);
-      kamera.lookAt(-142, 1.6, -142);
-      if (hud) {
-        hud.tampil(true);
-        hud.aturObjektif('Misi 6/7 · Koin Karang — Kumpulkan 5 koin emas yang tersebar di kota. (0/5)');
-        hud.aturJam(siklus ? siklus.teksJam() : '10:30', false);
-      }
-      return 'koin';
-    }
-    case 'hujan': {
-      // Misi ketujuh di tengah badai: van logistik di jalan basah, roadblock di depan.
-      aturJam(15.0);
-      if (siklus) siklus.aturHujan(1);
-      const v = lalu.find((m) => m.van) || lalu[0];
-      pemain.masukMobil(v);
-      v.pengemudi = 'pemain';
-      v.pos.set(-60, 0, 60);
-      v.heading = Math.PI * 0.75;
-      v.laju = 9;
-      v.kelompok.position.copy(v.pos);
-      // Roadblock di depan arah laju van, terlihat dari kamera belakang.
-      if (ctx.roadblock) {
-        ctx.roadblock.pasang(
-          v.pos.x + Math.sin(v.heading) * 26,
-          v.pos.z + Math.cos(v.heading) * 26,
-          v.heading + Math.PI / 2,
-        );
-      }
-      kamera.position.set(-67, 3.8, 67);
-      kamera.lookAt(-45, 1.2, 45);
-      if (hud) {
-        hud.tampil(true);
-        hud.aturWanted(3);
-        hud.aturCuaca(1, siklus ? `${siklus.teksCuaca()} · ${siklus.teksPeriode()}` : 'Hujan deras · Siang');
-        hud.aturObjektif('Misi 7/7 · Badai Karang: 96 m ke gudang (0:48) — roadblock di depan!');
-        hud.aturJam(siklus ? siklus.teksJam() : '15:00', false);
-        hud.aturLaju(v.laju, true);
-        hud.aturMobil(v.nama);
-        hud.aturBahan(v.tangki.teks, false);
-      }
-      return 'hujan';
-    }
-    case 'end':
-      aturJam(22);
-      kamera.position.set(-40, 90, 260);
-      kamera.lookAt(0, 10, 0);
-      if (hud) {
-        hud.tampil(true);
-        hud.aturJam(siklus ? siklus.teksJam() : '22:00', true);
-      }
-      return 'end';
-    case 'foto': {
-      // Bingkai ala mode foto: HUD disembunyikan, kamera dekat pemain dan van.
-      aturJam(9.5);
-      const v = lalu.find((m) => m.van) || lalu[0];
-      pemain.pos.set(v.pos.x + 3, 0, v.pos.z + 3);
-      pemain.kelompok.position.copy(pemain.pos);
-      pemain.kelompok.rotation.y = Math.PI * 0.8;
-      pemain.faseJalan = 0.6;
-      pemain.animasi();
-      kamera.position.set(v.pos.x + 6, 2.6, v.pos.z - 4);
-      kamera.lookAt(v.pos.x, 1.2, v.pos.z);
-      if (hud) hud.tampil(false);
-      if (overlay) overlay.classList.add('hidden');
-      return 'foto';
-    }
-    default:
-      return 'none';
+    // Sembunyikan overlay awal dan tampilkan HUD saat staging
+    var overlay = document.getElementById('startOverlay');
+    if (overlay) overlay.style.display = 'none';
+    var hud = document.getElementById('hud');
+    if (hud) hud.style.display = 'block';
+    G.started = true;
+    G.paused = false;
   }
-}
+};

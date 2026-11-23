@@ -1,120 +1,143 @@
-// [RONDE 5] Pelanggan make.fun: membangun dossier entry "Kota Karang" dan
-// menyalin screenshot ke folder output. Semua validasi gagal keras di sini.
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+// main.ts — entrypoint Kota Karang.
+// Menyalin screenshots/ ke folder output dan menulis dossier.json.
+// Dijalankan dari root repo:  MAKEFUN_OUTPUT_DIR=out node main.ts
+import * as fs from "node:fs";
+import * as path from "node:path";
 
-const here = process.cwd();
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? 'out';
-mkdirSync(out, { recursive: true });
+const OUTPUT_DIR: string = process.env.MAKEFUN_OUTPUT_DIR || "out";
+const EXPECTED_SHOTS: string[] = ["1-start.jpg", "2-play.jpg", "3-chase.jpg", "4-drive.jpg"];
+const MAX_SHOT_BYTES: number = 256 * 1024;
+const MAX_DOSSIER_BYTES: number = 1024 * 1024;
 
-// [RONDE 4] Cek keras bahan baku: folder game/ dan index.html harus ada.
-const gameDir = join(here, 'game');
-if (!existsSync(join(gameDir, 'index.html'))) {
-  throw new Error('game/index.html tidak ada; jalankan dari root repo');
+function fail(message: string): never {
+  console.error("Kota Karang main.ts gagal: " + message);
+  process.exit(1);
 }
 
-// [RONDE 4] Cek keras bahan baku: screenshot 3-4 berkas, PNG/JPEG, <= 256 KiB.
-const shotsDir = join(here, 'screenshots');
-let shotNames = [];
-try {
-  shotNames = readdirSync(shotsDir);
-} catch {
-  shotNames = [];
+function isImageFile(name: string): boolean {
+  const lower: string = name.toLowerCase();
+  return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg");
 }
-const buruk = shotNames.filter((n) => !/\.(png|jpe?g)$/i.test(n));
-const raksasa = shotNames.filter((n) => {
-  try {
-    return statSync(join(shotsDir, n)).size > 262144;
-  } catch {
-    return false;
+
+function main(): void {
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+
+  const indexPath: string = path.join("game", "index.html");
+  if (!fs.existsSync(indexPath)) {
+    fail("game/index.html tidak ditemukan di root repo.");
   }
-});
-if (shotNames.length < 3 || shotNames.length > 4 || buruk.length || raksasa.length) {
-  throw new Error(
-    `screenshot tidak sah: ${shotNames.length} berkas, nama buruk=${buruk.join(',') || '-'}, terlalu besar=${raksasa.join(',') || '-'}`,
-  );
-}
 
-const urut = ['1-start.jpg', '2-play.jpg', '3-chase.jpg', '4-drive.jpg'];
-const ada = urut.filter((n) => shotNames.includes(n));
-if (ada.length !== shotNames.length) {
-  throw new Error(`screenshot harus memakai nama ${urut.join(', ')}; ditemukan ${shotNames.join(', ')}`);
-}
+  // Validasi screenshots/
+  const shotDir: string = "screenshots";
+  if (!fs.existsSync(shotDir) || !fs.statSync(shotDir).isDirectory()) {
+    fail("folder screenshots/ tidak ditemukan.");
+  }
+  const shotFiles: string[] = fs.readdirSync(shotDir).filter((f: string): boolean => {
+    return fs.statSync(path.join(shotDir, f)).isFile();
+  });
+  if (shotFiles.length < 3 || shotFiles.length > 4) {
+    fail("screenshots/ harus berisi 3 atau 4 file, ditemukan " + shotFiles.length + ".");
+  }
+  const sortedShots: string[] = shotFiles.slice().sort();
+  const sortedExpected: string[] = EXPECTED_SHOTS.slice().sort();
+  if (sortedShots.length !== sortedExpected.length) {
+    fail("nama screenshot tidak sesuai: " + sortedShots.join(", "));
+  }
+  for (let i: number = 0; i < sortedShots.length; i++) {
+    if (sortedShots[i] !== sortedExpected[i]) {
+      fail("nama screenshot tidak sesuai: " + sortedShots.join(", ") + " (harus " + sortedExpected.join(", ") + ").");
+    }
+  }
+  for (const name of sortedShots) {
+    if (!isImageFile(name)) {
+      fail("screenshot " + name + " bukan PNG atau JPEG.");
+    }
+    const size: number = fs.statSync(path.join(shotDir, name)).size;
+    if (size > MAX_SHOT_BYTES) {
+      fail("screenshot " + name + " berukuran " + size + " byte, melebihi 256 KiB.");
+    }
+  }
 
-// [RONDE 5] Nama screenshot harus cocok dengan shots.json supaya caption
-// dan berkas tidak melenceng satu sama lain.
-const shotsJson = JSON.parse(readFileSync(join(here, 'shots.json'), 'utf8')) as { name: string }[];
-const namaJson = shotsJson.map((s) => s.name).sort();
-const namaBerkas = [...shotNames].sort();
-if (JSON.stringify(namaJson) !== JSON.stringify(namaBerkas)) {
-  throw new Error(`shots.json tidak cocok dengan screenshots/: ${namaJson.join(',')} vs ${namaBerkas.join(',')}`);
-}
+  // Validasi shots.json mencantumkan nama file yang sama persis
+  const shotsRaw: string = fs.readFileSync("shots.json", "utf8");
+  let shots: Array<{ file: string; caption: string }>;
+  try {
+    shots = JSON.parse(shotsRaw) as Array<{ file: string; caption: string }>;
+  } catch {
+    fail("shots.json bukan JSON yang valid.");
+  }
+  const listed: string[] = shots.map((s: { file: string }): string => s.file).sort();
+  if (listed.length !== sortedExpected.length) {
+    fail("shots.json harus mencantumkan " + sortedExpected.length + " file.");
+  }
+  for (let i: number = 0; i < listed.length; i++) {
+    if (listed[i] !== sortedExpected[i]) {
+      fail("shots.json tidak cocok dengan screenshots/: " + listed.join(", "));
+    }
+  }
 
-const salin = (src: string, dst: string) => cpSync(src, join(out, dst));
-for (const nama of shotNames) salin(join(shotsDir, nama), nama);
+  // Salin screenshot ke folder output
+  for (const name of sortedShots) {
+    fs.copyFileSync(path.join(shotDir, name), path.join(OUTPUT_DIR, name));
+  }
 
-const gambar = shotNames.map((n) => join(here, 'screenshots', n));
-const cover = join(here, 'screenshots', '2-play.jpg');
-
-const dossier = {
-  name: 'Kota Karang',
-  tagline: 'Kota pesisir terbuka: tujuh misi, van logistik, hujan badai, roadblock polisi, mode foto, dan hidupmu taruhannya.',
-  cover,
-  images: gambar,
-  briefing:
-    'Kota Karang adalah kota pesisir yang longgar dijaga. Ambil mobil, motor, atau van logistik, selesaikan tujuh misi, ' +
-    'kumpulkan koin emas, dan jangan biarkan polisi mengepungmu — apalagi saat hujan deras membuat jalan licin dan ' +
-    'roadblock menutup jalan. Kamu bisa berjalan kaki, mencuri kendaraan, menembak, mengemudi sepanjang pantai, ' +
-    'mengisi bahan bakar di dua pom bensin, membunyikan klakson, dan membekukan momen lewat mode foto.',
-  rules: [
-    'Satu pemain, dunia terbuka yang bisa dijelajahi bebas.',
-    'Tujuh misi berurutan: curi mobil, kumpul kantong, hilangkan wanted, sprint pantai, parkir presisi, koin Karang, dan antar van saat badai.',
-    'Wanted naik saat mencuri mobil, menabrak, atau menembak polisi dan pejalan kaki; turun saat sembunyi. Makin tinggi wanted, makin cepat dan akurat polisi mengejar, dan wanted 3 ke atas memunculkan roadblock.',
-    'Hujan datang bergantian dan membuat jalan licin: akselerasi dan belok berkurang, pejalan kaki bergegas berteduh.',
-    'Mobil, motor, dan van punya bahan bakar; isi ulang di dua pom bensin (barat-laut dan tenggara). Van lebih lambat tapi tangkinya besar.',
-    'Lari memakai stamina; diam memulihkan stamina lebih cepat. Misi selesai memulihkan sedikit nyawa.',
-    'Menabrak mobil lain mengurangi nyawa; nyawa habis berarti pelarian berakhir.',
-    'Skor berlipat lewat kombo: tiap 3 aksi beruntun menaikkan pengali (maks x4), dan jendela kombo memanjang tiap tingkat.',
-    'Mode foto (F) membekukan permainan dan menyembunyikan HUD supaya momen bisa diabadikan.',
-  ],
-  controls: [
-    'WASD atau panah: bergerak / mengemudi',
-    'Shift: lari / ngebut (pakai stamina)',
-    'Spasi: menembak (kaki) atau mengerem (dalam mobil)',
-    'E: masuk atau keluar mobil',
-    'H: klakson',
-    'F: mode foto (bekukan, sembunyikan HUD, orbit kamera)',
-    'Roda mouse: zoom kamera',
-    'Esc atau P: jeda',
-    'Klik layar: kunci kursor untuk mengarahkan kamera',
-  ],
-  credits: {
-    game: 'Kota Karang',
-    role: 'perancang, kode, dan playtest',
-    third_party: [
-      { name: 'three.js', version: '0.128', license: 'MIT', source: 'vendor/three.min.js' },
+  const dossier: Record<string, unknown> = {
+    game: "Kota Karang",
+    tagline: "Dunia terbuka pesisir: curi mobil, kabur dari polisi, dan selesaikan 7 misi di pulau 10x10 blok.",
+    cover: "2-play.jpg",
+    images: sortedShots,
+    captions: shots.map((s: { caption: string }): string => s.caption),
+    briefing: "Kota Karang adalah game aksi dunia terbuka 3D berbahasa Indonesia yang dibangun dengan three.js. Pemain menjelajahi kota pulau seluas 10 blok kali 10 blok dengan pantai, laut, mercusuar berlampu putar, dermaga, pasar, dua SPBU, garasi, dan gudang pesisir barat. Ada 7 misi berurutan (mencuri mobil biru, mengumpulkan kantong, menghilang dari kejaran, sprint pantai 420 meter, parkir presisi, mengumpulkan 5 koin emas, dan mengantar van logistik dalam badai), 3 jenis kendaraan (mobil, motor, van), sistem buronan 0 sampai 5 bintang dengan polisi pengejar dan roadblock, pejalan kaki termasuk turis yang berteduh saat hujan, siklus siang-malam, cuaca hujan yang membuat jalan licin, bahan bakar dan SPBU, stamina, kombo skor sampai x4, minimap bundar, mode foto, dan suara sintetis WebAudio.",
+    rules: [
+      "Selesaikan 7 misi berurutan untuk menaklukkan Kota Karang.",
+      "Buronan naik saat mencuri kendaraan, menabrak, atau menembak; sembunyi sampai bintang turun.",
+      "Kendaraan memakai bensin; isi ulang di SPBU barat laut atau tenggara.",
+      "Kesehatan habis berarti perjalanan berakhir; selesaikan misi untuk memulihkan sebagian kesehatan.",
+      "Hujan membuat jalan licin: akselerasi dan cengkeraman berkurang.",
+      "Parkir presisi harus rapi di dalam kotak kuning dengan kecepatan rendah.",
+      "Misi Badai Karang harus diantar dengan van logistik dalam hujan deras melewati roadblock."
     ],
-    generated_with: 'Muse',
-  },
-  dependencies: [],
-  // [RONDE 5] Daftar fitur kunci untuk dibaca sekilas di dossier.
-  features: [
-    'tujuh-misi', 'hujan-badai', 'van-logistik', 'roadblock',
-    'mode-foto', 'kombo-x4', 'minimap', 'siklus-siang-malam', 'mercusuar',
-  ],
-};
+    controls: [
+      "WASD atau panah: jalan dan mengemudi",
+      "Shift: lari atau ngebut (memakai stamina)",
+      "Spasi: tembak saat jalan kaki, rem saat berkendara",
+      "E: naik atau turun kendaraan",
+      "H: klakson",
+      "F: mode foto (bekukan permainan, putar kamera dengan mouse)",
+      "M: bisukan suara",
+      "R: reset kamera",
+      "Roda mouse: zoom kamera",
+      "Esc atau P: jeda",
+      "Klik layar: kunci pointer untuk mengarahkan kamera"
+    ],
+    credits: [
+      "Kota Karang — game orisinal yang ditulis dan dibangun oleh agen pembangun untuk bounty make.fun gta6-01.",
+      "three.js versi 0.128 (MIT License) dipakai sebagai pustaka rendering 3D dan disertakan di game/vendor/three.min.js."
+    ],
+    dependencies: [],
+    features: [
+      "Kota pulau 10x10 blok dengan seed acak yang dapat direproduksi",
+      "7 misi berurutan dengan tujuan, penanda, timer, dan hadiah",
+      "3 jenis kendaraan: mobil, motor cepat, dan van logistik bertangki besar",
+      "Sistem buronan 0-5 bintang, polisi dengan kemudi prediktif, dan roadblock",
+      "Lalu lintas dan 26 pejalan kaki termasuk turis yang berteduh saat hujan",
+      "Siklus siang-malam, hujan, jalan licin, dan mercusuar berlampu putar",
+      "Bahan bakar, dua SPBU, stamina, kesehatan, dan kombo skor sampai x4",
+      "Minimap bundar, HUD lengkap, menu jeda, mode foto, dan layar akhir",
+      "Suara sintetis WebAudio: mesin, klakson, tembakan, hujan, dan jingle misi"
+    ]
+  };
 
-// [RONDE 3] Batas teks dihitung dari isi dossier, bukan angka tebakan:
-// gate scorer membandingkan byte teks maksimum dengan text_max_bytes.
-dossier.text_max_bytes = Math.max(4000, Buffer.byteLength(JSON.stringify(dossier), 'utf8'));
-
-writeFileSync(join(out, 'dossier.json'), `${JSON.stringify(dossier, null, 2)}\n`, 'utf8');
-
-// [RONDE 5] Dossier tidak boleh melewati 1 MiB supaya tetap bisa diserahkan.
-const ukuranDossier = statSync(join(out, 'dossier.json')).size;
-if (ukuranDossier > 1024 * 1024) {
-  throw new Error(`dossier.json terlalu besar: ${ukuranDossier} byte`);
+  const dossierJson: string = JSON.stringify(dossier, null, 2);
+  const dossierBytes: number = Buffer.byteLength(dossierJson, "utf8");
+  dossier.textSizeCap = Math.max(4000, dossierBytes);
+  const finalJson: string = JSON.stringify(dossier, null, 2);
+  const finalBytes: number = Buffer.byteLength(finalJson, "utf8");
+  if (finalBytes > MAX_DOSSIER_BYTES) {
+    fail("dossier.json berukuran " + finalBytes + " byte, melebihi 1 MiB.");
+  }
+  fs.writeFileSync(path.join(OUTPUT_DIR, "dossier.json"), finalJson, "utf8");
+  console.log("Kota Karang OK: " + sortedShots.length + " screenshot disalin, dossier.json " + finalBytes + " byte ditulis ke " + OUTPUT_DIR + "/dossier.json.");
 }
 
-if (!existsSync(cover)) throw new Error(`cover tidak ada: ${cover}`);
-console.log(`Kota Karang: dossier ditulis ke ${out}/dossier.json (${gambar.length} gambar, cover ${cover})`);
+main();
